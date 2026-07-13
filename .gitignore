@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Logs
+*.log
+
+# Trained models
+models/
+*.pkl
+
+# Dataset
+data/raw/
+data/processed/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# VS Code
+.vscode/
+
+# Pytest
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS files
+Thumbs.db
+.DS_Store

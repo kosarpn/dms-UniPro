@@ -1,4 +1,3 @@
-
 """
 Driver Drowsiness Detection System (DMS)
 A real-time driver monitoring system using hybrid face detection,
@@ -16,7 +15,6 @@ Features:
 - Kalman filtering for noise reduction
 - Personalized calibration for each driver
 """
-
 import cv2
 import time
 import signal
@@ -27,6 +25,7 @@ import numpy as np
 from features.ear import calculate_ear
 from features.ear import calculate_average_ear
 from features.mar import calculate_mar
+from features.blink import BlinkRateAnalyzer
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -61,6 +60,10 @@ from features.head_pose import HeadPoseEstimator
 # Alert Layer
 from alerts.alert_manager import AlertManager
 
+#import کردن classifier ها
+# from ml.classifiers.rule_based_classifier import RuleBasedClassifier
+from ml.classifiers.svm_classifier import SVMClassifier
+from ml.feature_extractor import FeaturExtractor
 # ============================================================================
 # Main Application Class
 # ============================================================================
@@ -129,12 +132,10 @@ class DriverMonitoringSystem:
             frame_width=self.config.FRAME_WIDTH,
             frame_height=self.config.FRAME_HEIGHT
         )
-        
         # ====================================================================
         # Layer 4: Driver Selection
         # ====================================================================
         self.logger.info("Initializing driver selection...")
-        
         self.driver_selector = HybridDriverSelector(
             steering_side=self.config.STEERING_SIDE,
             frame_width=self.config.FRAME_WIDTH,
@@ -143,27 +144,32 @@ class DriverMonitoringSystem:
             position_weight=self.config.POSITION_WEIGHT,
             tracking_weight=self.config.TRACKING_WEIGHT
         )
-        
         # ====================================================================
         # Layer 5: Feature Analysis
         # ====================================================================
         self.logger.info("Initializing feature analyzers...")
-        
         self.ear_analyzer = EyeAspectRatioAnalyzer(
-            history_size=self.config.EAR_HISTORY_SIZE
+            history_size=self.config.EAR_HISTORY_SIZE,
+            fps=self.config.CAMERA_FPS,          
+            drowsy_duration_sec=5.0
         )
         self.mar_analyzer = MouthAspectRatioAnalyzer(
-            yawn_threshold=self.config.MAR_THRESHOLD
+            yawn_threshold=self.config.MAR_THRESHOLD,
         )
+        self.blink_analyzer=BlinkRateAnalyzer()
+        # self.classifier=RuleBasedClassifier(
+        #     ear_threshold=self.config.EAR_THRESHOLD,
+        #     mar_threshold=self.config.MAR_THRESHOLD,
+        #     drowsy_frame_threshold=self.config.DROWSY_FRAME_THRESHOLD
+        # )
+        self.classifier=SVMClassifier()
+        self.feature_extractor=FeaturExtractor()
         self.head_pose_estimator = HeadPoseEstimator()
-        
         # ====================================================================
         # Layer 6: Signal Processing
         # ====================================================================
         self.logger.info("Initializing signal processing...")
-        
         self.kalman_filter = AdaptiveKalmanFilter()
-        
         # ====================================================================
         # Layer 7: Alert System
         # ====================================================================
@@ -187,7 +193,6 @@ class DriverMonitoringSystem:
         self.fps_counter = 0
         self.fps_time = time.time()
         self.processing_times = []
-        
         # ====================================================================
         # Layer 9: Signal Handlers
         # ====================================================================
@@ -240,11 +245,9 @@ class DriverMonitoringSystem:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.FRAME_WIDTH)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.FRAME_HEIGHT)
         cap.set(cv2.CAP_PROP_FPS, self.config.CAMERA_FPS)
-        
         # Disable auto features for stability
         cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
         cap.set(cv2.CAP_PROP_AUTO_WB, 0)
-        
         self.logger.info(f"Camera ready: {self.config.FRAME_WIDTH}x{self.config.FRAME_HEIGHT} @ {self.config.CAMERA_FPS}fps")
         return cap
     # ========================================================================
@@ -254,23 +257,18 @@ class DriverMonitoringSystem:
     def _run_calibration(self, cap: cv2.VideoCapture) -> bool:
         """
         Run the calibration process
-        
         Steps:
         1. EAR calibration (5 seconds)
         2. Distance calibration (5 seconds)
         3. Position calibration (5 seconds)
         """
         self.logger.info("Starting calibration process...")
-        
         driver_id = input("Enter driver ID: ").strip()
         if not driver_id:
             driver_id = f"driver_{int(time.time())}"
-        
         self.calibration_manager.start_calibration(driver_id)
-        
         calibration_frames = []
         start_time = time.time()
-        
         while time.time() - start_time < self.config.CALIBRATION_DURATION * 3:
             ret, frame = cap.read()
             if not ret:
@@ -307,7 +305,6 @@ class DriverMonitoringSystem:
         
         # Finalize calibration
         profile = self.calibration_manager.finalize_calibration()
-        
         if profile:
             self.current_driver_id = driver_id
             self.current_driver_profile = profile
@@ -326,15 +323,12 @@ class DriverMonitoringSystem:
         else:
             self.logger.error("Calibration failed!")
             return False
-    
     # ========================================================================
     # Frame Processing Pipeline
     # ========================================================================
-    
     def _process_frame(self, frame: np.ndarray) -> dict:
         """
         Complete frame processing pipeline
-        
         Pipeline steps:
         1. Face detection (Hybrid: MediaPipe → YOLO)
         2. Depth estimation (MiDAS)
@@ -353,6 +347,8 @@ class DriverMonitoringSystem:
             'driver_selected': False,
             'ear': 0.0,
             'mar': 0.0,
+            'blink_rate':0.0,
+            'blink_state':"normal",
             'is_drowsy': False,
             'is_yawning': False,
             'processing_time_ms': 0.0
@@ -364,23 +360,19 @@ class DriverMonitoringSystem:
         print("METHOD:",detection_result.method_used)
         if not detection_result.success or detection_result.landmarks is None:
             return result
-        
         result['face_detected'] = True
         landmarks = detection_result.landmarks
         face_bbox = detection_result.face_bbox
-        
         # ====================================================================
         # Step 2: Depth Estimation (if enabled)
         # ====================================================================
         depth_map = None
         distance_score = 0.5
-        
         if self.depth_estimator and self.depth_estimator.is_available:
             depth_map = self.depth_estimator.estimate_depth_map(frame)
             if depth_map is not None and face_bbox:
                 face_depth = self.depth_estimator.get_face_distance(frame, face_bbox)
                 distance_score = 1 - (face_depth / 255.0) if face_depth else 0.5
-        
         # ====================================================================
         # Step 3: Driver Selection
         # ====================================================================
@@ -406,35 +398,56 @@ class DriverMonitoringSystem:
             #MAR
             mar_value=self._extract_mar_from_landmarks(landmarks)
             filtered_mar=self.kalman_filter.update_mar(mar_value)
-            result['mar']
+            result['mar']=filtered_mar
+            MOUTH_OUTER = [
+                61, 185, 40, 39, 37, 0, 267, 269, 270, 409,
+                291, 375, 321, 405, 314, 17, 84, 181, 91, 146
+            ]
+            mouth_landmarks = landmarks[MOUTH_OUTER]
             #Head pose
             head_pose = self._extract_head_pose_from_landmarks(landmarks)
             # ====================================================================
             # Step 5: Drowsiness Detection
             # ====================================================================
-            ear_threshold=(
+            ear_threshold = (
                 self.calibration_manager.get_current_threshold()
                 if self.is_calibrated
                 else 0.25
             )
             self.ear_analyzer.set_threshold(ear_threshold)
-            ear_status=self.ear_analyzer.update(filtered_ear)
-            print("EAR RAW:", ear_value)
-            print("EAR FILTERED:", filtered_ear)
-            print("THRESHOLD:", ear_threshold)
-            print("CLOSED FRAMES:", ear_status['closed_frames'])
-            print("IS_DROWSY:", ear_status['is_drowsy'])
-            print("--------")
-            mar_status=self.mar_analyzer.update(filtered_mar)
-            is_drowsy=(
-                ear_status['is_drowsy']
-                or(
-                ear_status["closed_frames"] 
-                > self.config.DROWSY_FRAME_THRESHOLD
-                )
+            ear_status = self.ear_analyzer.update(filtered_ear)
+            mar_status = self.mar_analyzer.update(filtered_mar, mouth_landmarks)
+            blink_status = self.blink_analyzer.update(
+                ear_status["is_closed"]
             )
-            result['is_drowsy']=is_drowsy
-            result['is_yawning']=mar_status['yawn_detected']
+
+            # prediction = self.classifier.predict(
+            #     ear_status=ear_status,
+            #     mar_status=mar_status,
+            #     blink_status=blink_status,
+            # )
+            dataset_features = self.feature_extractor.extract(frame)
+            if dataset_features is None:
+                return result
+            prediction = self.classifier.predict(
+                dataset_features)
+            # result["blink_rate"] = prediction["blink_rate"]
+            result["is_drowsy"] = prediction["is_drowsy"]
+            # result["is_yawning"] = prediction["is_yawning"]
+            result["confidence"] = prediction["confidence"]
+            # result["level"] = prediction["level"]
+            # ear_drowsy=(
+            #     ear_status['is_drowsy']
+            # )
+            # is_drowsy=ear_drowsy 
+            print(f"EAR : {filtered_ear:.3f}")
+            print(f"MAR : {filtered_mar:.3f}")
+            # print(f"Blink Rate : {prediction['blink_rate']:.1f}")
+            print(f"Drowsy : {prediction['is_drowsy']}")
+            # print(f"Yawn : {prediction['is_yawning']}")
+            print(f"Confidence : {prediction['confidence']:.2f}")
+            # print(f"Level : {prediction['level']}")
+            print("----------------------------")
         # ------------------------------------------------
         # YOLO FALLBACK MODE
         # ------------------------------------------------
@@ -443,16 +456,16 @@ class DriverMonitoringSystem:
             result['mar']=0.0
             result['is_drowsy']=False
             result['is_yawning']=False
-    
         # ====================================================================
         # Step 6: Alert Management
         # ====================================================================
-        if is_drowsy:
+        if result["is_drowsy"]:
             self.alert_manager.trigger_drowsy_alert(
-                confidence=ear_status.get('confidence', 0.8),
-                ear_value=filtered_ear
+                confidence=result.get("confidence", 0.8),
+                ear_value=result.get("ear", 0.0)
             )
-        elif result['is_yawning']:
+
+        elif result["is_yawning"]:
             self.alert_manager.trigger_yawn_alert()
         # ====================================================================
         # Step 7: Update Statistics
@@ -465,16 +478,6 @@ class DriverMonitoringSystem:
     # ========================================================================
     def _extract_ear_from_landmarks(self, landmarks: np.ndarray) -> float:
         """Extract EAR value from face landmarks"""
-        # This depends on your landmark format
-        # For MediaPipe 468-point model:
-        # Left eye indices: 33, 160, 158, 133, 153, 144
-        # Right eye indices: 362, 385, 387, 263, 373, 380
-        
-        # try:
-        #     # Placeholder - implement based on your landmark format
-        #     return 0.28
-        # except:
-        #     return 0.3
         """MediaPipe 468-point indices"""
         LEFT_EYE  = [33, 160, 158, 133, 153, 144]
         RIGHT_EYE = [362, 385, 387, 263, 373, 380]
@@ -485,19 +488,24 @@ class DriverMonitoringSystem:
         except Exception as e:
             self.logger.warning(f"EAR extraction failed: {e}")
             return 0.0 
-    
     def _extract_mar_from_landmarks(self, landmarks: np.ndarray) -> float:
         """Extract MAR value from face landmarks"""
         if landmarks is None or len(landmarks)<468:
             return None
-        MOUTH_INDICES = [
-        61,   # left corner
-        13,   # upper inner lip
-        14,   # lower inner lip
-        291   # right corner
-]
+#         MOUTH_INDICES = [
+#         61,   # left corner
+#         13,   # upper inner lip
+#         14,   # lower inner lip
+#         291   # right cornerّ
+# ]
+          
+        # MediaPipe MOUTH_OUTER indices (20 points)
+        MOUTH_OUTER = [
+            61, 185, 40, 39, 37, 0, 267, 269, 270, 409,  # Upper lip
+            291, 375, 321, 405, 314, 17, 84, 181, 91, 146  # Lower lip
+        ]
         try:
-            mouth_landmarks=landmarks[MOUTH_INDICES]
+            mouth_landmarks=landmarks[MOUTH_OUTER]
             return calculate_mar(mouth_landmarks)
         except Exception as e:
             self.logger.error(f"MAR extraction failed:{e}")
@@ -553,11 +561,17 @@ class DriverMonitoringSystem:
         # MAR value
         cv2.putText(display, f"MAR: {result['mar']:.3f}", (10, 85),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
+        cv2.putText(
+            display,f"Blink Rate:{result['blink_rate']:.1f}/min ({result['blink_state']})",
+            (20,180),
+            cv2.FONT_HERSHEY_COMPLEX,
+            0.5,
+            (255,255,0),
+            2
+        )
         # Processing time
         cv2.putText(display, f"Time: {result['processing_time_ms']:.1f}ms", (10, 105),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-        
         # ====================================================================
         # Alert Display (Center-top)
         # ====================================================================
@@ -613,22 +627,18 @@ class DriverMonitoringSystem:
     
     def run(self):
         """Main application loop"""
-        
         # Initialize camera
         cap = self._initialize_camera()
         if cap is None:
             self.logger.error("Failed to initialize camera!")
             return
-        
         # Run calibration if needed
         if not self.is_calibrated:
             self.logger.info("System not calibrated. Starting calibration...")
             if not self._run_calibration(cap):
                 self.logger.warning("Calibration skipped or failed. Using default settings.")
-        
         self.is_running = True
         self.logger.info("🚀 System running. Press 'q' to quit, 'c' to recalibrate")
-        
         # Main processing loop
         while self.is_running:
             # Read frame
@@ -636,28 +646,21 @@ class DriverMonitoringSystem:
             if not ret:
                 self.logger.warning("Failed to read frame")
                 break
-            
             self.frame_count += 1
             frame = cv2.flip(frame, 1)
-            
             # Process frame
             result = self._process_frame(frame)
-            
             # Visualize results
             display = self._visualize(frame, result)
-            
             # Show frame
             cv2.imshow("Driver Monitoring System", display)
-            
             # Update FPS
             self._update_fps()
-            
             # Store processing time
             if result['processing_time_ms'] > 0:
                 self.processing_times.append(result['processing_time_ms'])
                 if len(self.processing_times) > 1000:
                     self.processing_times.pop(0)
-            
             # Handle keyboard input
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
@@ -667,16 +670,13 @@ class DriverMonitoringSystem:
                 self.logger.info("Recalibration requested")
                 self.is_calibrated = False
                 self._run_calibration(cap)
-        
         # Cleanup
         cap.release()
         cv2.destroyAllWindows()
         self.shutdown()
-    
     # ========================================================================
     # Shutdown
     # ========================================================================
-    
     def shutdown(self):
         """Graceful shutdown of all components"""
         self.logger.info("Shutting down system...")

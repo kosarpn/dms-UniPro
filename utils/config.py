@@ -25,7 +25,7 @@ class Config:
     
     # Drowsiness thresholds
     EAR_THRESHOLD: float = 0.25
-    MAR_THRESHOLD: float = 0.6
+    MAR_THRESHOLD: float = 0.25
     EAR_HISTORY_SIZE: int = 30
     
     # Driver selection weights

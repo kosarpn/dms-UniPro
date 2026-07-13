@@ -6,25 +6,37 @@
 """
 
 class AdaptiveKalmanFilter:
-    """
-    نسخه ساده فیلتر کالمن برای صاف کردن داده‌ها
-    """
-    
+    """ 
+     _(البته اینEMA  هست در وافع نه فیلتر کالمن) نسخه ساده فیلتر کالن"""
+
     def __init__(self):
-        # مقدار اولیه
-        self.last_value = 0.3
-        self.smoothing_factor = 0.7  # هرچه کمتر، صاف‌تر
-    
+
+        # حافظه جدا برای EAR
+        self.last_ear = 0.3
+
+        # حافظه جدا برای MAR
+        self.last_mar = 0.2
+
+        self.smoothing_factor = 0.7
+
     def update_ear(self, ear_value: float) -> float:
-        """صاف کردن مقدار EAR"""
-        # میانگین وزنی بین مقدار جدید و قبلی
-        filtered = self.smoothing_factor * ear_value + (1 - self.smoothing_factor) * self.last_value
-        self.last_value = filtered
+
+        filtered = (
+            self.smoothing_factor * ear_value
+            + (1 - self.smoothing_factor) * self.last_ear
+        )
+
+        self.last_ear = filtered
+
         return filtered
-    
+
     def update_mar(self, mar_value: float) -> float:
-        """صاف کردن مقدار MAR"""
-        filtered = self.smoothing_factor * mar_value + (1 - self.smoothing_factor) * self.last_value
-        self.last_value = filtered
+
+        filtered = (
+            self.smoothing_factor * mar_value
+            + (1 - self.smoothing_factor) * self.last_mar
+        )
+
+        self.last_mar = filtered
+
         return filtered
-    

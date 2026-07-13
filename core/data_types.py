@@ -51,7 +51,6 @@ class DrowsinessLevel(Enum):
 # ============================================================================
 # Data Classes (DTOs)
 # ============================================================================
-
 @dataclass
 class HeadPoseData:
     yaw: float
@@ -69,3 +68,41 @@ class GazeData:
     confidence: float = 1.0
     off_road_duration: float = 0.0
     is_distracted: bool = False
+@dataclass
+class EyeData:
+    ear:float
+    average_ear:float
+    is_closed:bool=False
+    blink_count:int=0
+    blink_rate:float=0.0
+    closed_duration:float=0.0
+    perclos:float=0.0
+
+@dataclass
+class MouthData:
+    mar: float
+    average_mar: float
+    max_mar: float
+
+    mouth_width: float
+    mouth_height: float
+
+    is_yawning: bool
+    yawn_detected: bool
+
+    yawn_duration: float
+    yawn_count: int
+
+    speaking_detected: bool
+    smile_detected: bool
+@dataclass
+class Prediction:
+    """
+    خروجی مشترک تمام Classifierها
+    """
+    is_drowsy:bool
+    confidence:float
+    level:DrowsinessLevel
+    reason:str=""
+
+
