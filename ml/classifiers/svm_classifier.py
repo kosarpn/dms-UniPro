@@ -26,7 +26,6 @@ class SVMClassifier(BaseClassifier):
                 "is_drowsy": bool(prediction),
                 "confidence": confidence,
             }
-
     def reset(self):
         pass
       
