@@ -170,7 +170,7 @@ class MouthAspectRatioAnalyzer:
             'mar': mar_value,
             'average_mar': avg_mar,
             'max_mar': max_mar,
-            'is_yawning': is_yawn,
+            'is_yawning': self.is_currently_yawning,
             'is_currently_yawning': self.is_currently_yawning,
             'yawn_detected': yawn_detected,
             'yawn_frames': self.yawn_frames_count,

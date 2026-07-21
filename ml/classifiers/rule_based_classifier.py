@@ -11,9 +11,14 @@ class RuleBasedClassifier(BaseClassifier):
     def __init__(self,
                  ear_threshold: float = 0.25,
                  mar_threshold: float = 0.25,
-                 drowsy_frame_threshold: int = 10):
+                 drowsy_frame_threshold: int = 60):
         super().__init__()
-
+        print(
+        f"[RULE INIT] ear_threshold={ear_threshold}, "
+        f"mar_threshold={mar_threshold}, "
+        f"drowsy_frame_threshold={drowsy_frame_threshold}"
+    )
+            
         self.ear_threshold = ear_threshold
         self.mar_threshold = mar_threshold
         self.drowsy_frame_threshold = drowsy_frame_threshold

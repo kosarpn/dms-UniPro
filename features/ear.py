@@ -6,6 +6,7 @@
 import numpy as np
 import time
 from typing import List, Optional, Tuple,Dict
+from collections import deque
 def calculate_ear(eye_landmarks: np.ndarray) -> float:
     """
     محاسبه Eye Aspect Ratio برای یک چشم
@@ -75,6 +76,8 @@ class EyeAspectRatioAnalyzer:
             ear_threshold: آستانه تشخیص چشم بسته
             drowsy_frames_threshold: تعداد فریم‌های متوالی چشم بسته برای تشخیص خواب‌آلودگی
         """
+        self.blink_timestamps=deque()
+        self.blink_window_seconds = 60
         self.history_size = history_size
         self.ear_threshold = ear_threshold
         self.fps=fps
@@ -87,7 +90,6 @@ class EyeAspectRatioAnalyzer:
         self.eye_closed = False
         #time-based drowsiness
         self.closed_start_time=None
-
         # تاریخچه
         self.ear_history: List[float] = []
         self.closed_history=[]
@@ -96,7 +98,6 @@ class EyeAspectRatioAnalyzer:
         self.total_frames = 0
         # آمار
         self.last_blink_frame = 0
-        self.blink_rate = 0.0
     def update(self, ear_value: float) -> dict:
         """
         به‌روزرسانی تحلیل‌گر با مقدار جدید EAR
@@ -120,6 +121,13 @@ class EyeAspectRatioAnalyzer:
         elif self.eye_closed and ear_value > self.open_threshold:
             self.eye_closed = False
         is_closed = self.eye_closed
+        print(
+        f"EAR={ear_value:.3f} | "
+        f"close={self.close_threshold:.3f} | "
+        f"open={self.open_threshold:.3f} | "
+        f"is_closed={is_closed} | "
+        f"closed_frames={self.closed_frames}"
+    )
         self.closed_history.append(1 if is_closed else 0)
         #نگهداری فقط 60 ثانیه اخیر 
         max_history=self.fps*60
@@ -134,9 +142,13 @@ class EyeAspectRatioAnalyzer:
                 self.closed_start_time=current_time
         else:
             if self.closed_frames > 0:
-                if 2 <= self.closed_frames <= 8:
+                if 2 <= self.closed_frames <=int(self.fps*0.8):
+                    print("✅ BLINK DETECTED")
                     self.blink_count += 1
                     self.last_blink_frame = self.total_frames
+                    self.blink_timestamps.append(current_time)
+                else:
+                    print("❌ NOT BLINK")
             self.closed_frames = 0
             self.closed_start_time=None
         closed_duration=0.0
@@ -146,9 +158,17 @@ class EyeAspectRatioAnalyzer:
         # تشخیص خواب‌آلودگی (چشم بسته برای مدت طولانی)
         # is_drowsy = self.closed_frames > self.drowsy_frames_threshold
         # محاسبه نرخ پلک زدن (پلک در دقیقه)
-        if self.total_frames > 30:
-            # تخمین بر اساس 30 فریم اخیر (≈ 1 ثانیه)
-            self.blink_rate = self.blink_count / (self.total_frames / self.fps) * 60
+        # if self.total_frames > 30:
+        #     # تخمین بر اساس 30 فریم اخیر (≈ 1 ثانیه)
+        # حذف Blinkهای قدیمی‌تر از پنجره زمانی
+        while (
+            self.blink_timestamps
+            and current_time - self.blink_timestamps[0] > self.blink_window_seconds
+        ):
+            self.blink_timestamps.popleft()
+
+        # تعداد Blink در 60 ثانیه اخیر
+        blink_rate = len(self.blink_timestamps)
         # میانگین EAR اخیر
         avg_ear = np.mean(self.ear_history[-10:]) if len(self.ear_history) >= 10 else ear_value
         return {
@@ -159,9 +179,8 @@ class EyeAspectRatioAnalyzer:
             'closed_frames': self.closed_frames,
             'closed_duration':closed_duration,
             'blink_count': self.blink_count,
-            'blink_rate': self.blink_rate,
+            'blink_rate':blink_rate,
             'perclos':perclos,
-            
         }
     def get_ear_history(self) -> List[float]:
         """دریافت تاریخچه EAR"""
@@ -172,7 +191,7 @@ class EyeAspectRatioAnalyzer:
         self.closed_frames = 0
         self.blink_count = 0
         self.total_frames = 0
-        self.blink_rate = 0.0
+        self.blink_timestamps.clear()
     def set_threshold(self, new_threshold: float):
         """تنظیم آستانه جدید (برای کالیبراسیون شخصی)"""
         self.ear_threshold = new_threshold
@@ -181,7 +200,7 @@ class EyeAspectRatioAnalyzer:
         return {
             'total_frames': self.total_frames,
             'blink_count': self.blink_count,
-            'blink_rate': self.blink_rate,
+            'blink_rate': len(self.blink_timestamps),
             'average_ear': np.mean(self.ear_history) if self.ear_history else 0,
             'min_ear': min(self.ear_history) if self.ear_history else 0,
             'max_ear': max(self.ear_history) if self.ear_history else 0

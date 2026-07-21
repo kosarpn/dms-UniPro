@@ -25,7 +25,6 @@ import numpy as np
 from features.ear import calculate_ear
 from features.ear import calculate_average_ear
 from features.mar import calculate_mar
-from features.blink import BlinkRateAnalyzer
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 # ============================================================================
@@ -59,8 +58,8 @@ from features.head_pose import HeadPoseEstimator
 from alerts.alert_manager import AlertManager
 
 #import کردن classifier ها
-# from ml.classifiers.rule_based_classifier import RuleBasedClassifier
-from ml.classifiers.svm_classifier import SVMClassifier
+from ml.classifiers.rule_based_classifier import RuleBasedClassifier
+# from ml.classifiers.svm_classifier import SVMClassifier
 from ml.feature_extractor import FeaturExtractor
 # ============================================================================
 # Main Application Class
@@ -111,6 +110,7 @@ class DriverMonitoringSystem:
         self.depth_estimator = MiDASDepthEstimator(
             model_type=self.config.DEPTH_MODEL_TYPE
         ) if self.config.ENABLE_DEPTH_ESTIMATION else None
+        self.head_pose_estimator=HeadPoseEstimator()
         
         # ====================================================================
         # Layer 3: Calibration Components
@@ -154,13 +154,12 @@ class DriverMonitoringSystem:
         self.mar_analyzer = MouthAspectRatioAnalyzer(
             yawn_threshold=self.config.MAR_THRESHOLD,
         )
-        self.blink_analyzer=BlinkRateAnalyzer()
-        # self.classifier=RuleBasedClassifier(
-        #     ear_threshold=self.config.EAR_THRESHOLD,
-        #     mar_threshold=self.config.MAR_THRESHOLD,
-        #     drowsy_frame_threshold=self.config.DROWSY_FRAME_THRESHOLD
-        # )
-        self.classifier=SVMClassifier()
+        self.classifier=RuleBasedClassifier(
+            ear_threshold=self.config.EAR_THRESHOLD,
+            mar_threshold=self.config.MAR_THRESHOLD,
+            drowsy_frame_threshold=self.config.DROWSY_FRAME_THRESHOLD
+        )
+        # self.classifier=SVMClassifier()
         self.feature_extractor=FeaturExtractor()
         self.head_pose_estimator = HeadPoseEstimator()
         # ====================================================================
@@ -388,6 +387,8 @@ class DriverMonitoringSystem:
         # ------------------------------------------------
         # MEDIAPIPE MODE
         # ------------------------------------------------
+        """این بخش رو بعد کامنت کن چون میخوام بخشی شو از چون که extractor.py رو  اضافه میکنیم 
+        """
         if detection_result.method_used==detection_result.method_used.MEDIAPIPE:
             #EAR
             ear_value=self._extract_ear_from_landmarks(landmarks)
@@ -403,7 +404,6 @@ class DriverMonitoringSystem:
             ]
             mouth_landmarks = landmarks[MOUTH_OUTER]
             #Head pose
-            head_pose = self._extract_head_pose_from_landmarks(landmarks)
             # ====================================================================
             # Step 5: Drowsiness Detection
             # ====================================================================
@@ -414,26 +414,42 @@ class DriverMonitoringSystem:
             )
             self.ear_analyzer.set_threshold(ear_threshold)
             ear_status = self.ear_analyzer.update(filtered_ear)
+            
             mar_status = self.mar_analyzer.update(filtered_mar, mouth_landmarks)
-            blink_status = self.blink_analyzer.update(
-                ear_status["is_closed"]
+            
+            head_pose = self.head_pose_estimator.estimate(
+               landmarks,
+                frame.shape
             )
-
-            # prediction = self.classifier.predict(
-            #     ear_status=ear_status,
-            #     mar_status=mar_status,
-            #     blink_status=blink_status,
-            # )
-            dataset_features = self.feature_extractor.extract(frame)
-            if dataset_features is None:
-                return result
+            result["head_pose"]=head_pose
+            blink_status = {
+                "blink_rate":ear_status["blink_rate"],
+                "blink_count":ear_status["blink_count"]
+            }
+            print(
+                "Blink:",
+                ear_status["blink_rate"],
+                "count:",
+                ear_status["blink_count"]
+            )
             prediction = self.classifier.predict(
-                dataset_features)
-            # result["blink_rate"] = prediction["blink_rate"]
+                ear_status=ear_status,
+                mar_status=mar_status,
+                blink_status=blink_status,
+            )
+            # dataset_features = self.feature_extractor.extract(ear_status=ear_status,
+            #                                                   mar_status=mar_status,
+            #                                                   head_pose=head_pose)
+            # if dataset_features is None:
+            #     return result
+            # prediction = self.classifier.predict(
+            #     dataset_features)
+            result["blink_rate"] = prediction["blink_rate"]
             result["is_drowsy"] = prediction["is_drowsy"]
-            # result["is_yawning"] = prediction["is_yawning"]
+            result["is_yawning"] = prediction["is_yawning"]
             result["confidence"] = prediction["confidence"]
-            # result["level"] = prediction["level"]
+            result["level"] = prediction["level"]
+
             # ear_drowsy=(
             #     ear_status['is_drowsy']
             # )
@@ -496,7 +512,6 @@ class DriverMonitoringSystem:
 #         14,   # lower inner lip
 #         291   # right cornerّ
 # ]
-          
         # MediaPipe MOUTH_OUTER indices (20 points)
         MOUTH_OUTER = [
             61, 185, 40, 39, 37, 0, 267, 269, 270, 409,  # Upper lip
@@ -519,7 +534,6 @@ class DriverMonitoringSystem:
     # ========================================================================
     # Visualization
     # ========================================================================
-    
     def _visualize(self, frame: np.ndarray, result: dict) -> np.ndarray:
         """
         Draw results on frame
@@ -559,14 +573,46 @@ class DriverMonitoringSystem:
         # MAR value
         cv2.putText(display, f"MAR: {result['mar']:.3f}", (10, 85),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(
-            display,f"Blink Rate:{result['blink_rate']:.1f}/min ({result['blink_state']})",
-            (20,180),
-            cv2.FONT_HERSHEY_COMPLEX,
-            0.5,
-            (255,255,0),
-            2
-        )
+        if "head_pose" in result:
+            hp = result["head_pose"]
+            cv2.putText(
+                display,
+                f"Pitch: {hp['pitch']:.1f}",
+                (10,125),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0,255,255),
+                1
+            )
+
+            cv2.putText(
+                display,
+                f"Yaw: {hp['yaw']:.1f}",
+                (10,145),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0,255,255),
+                1
+            )
+
+            cv2.putText(
+                display,
+                f"Roll: {hp['roll']:.1f}",
+                (10,165),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0,255,255),
+                1
+            )
+                
+            cv2.putText(
+                display,f"Blink Rate:{result['blink_rate']:.1f}/min ({result['blink_state']})",
+                (20,180),
+                cv2.FONT_HERSHEY_COMPLEX,
+                0.5,
+                (255,255,0),
+                2
+            )
         # Processing time
         cv2.putText(display, f"Time: {result['processing_time_ms']:.1f}ms", (10, 105),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
@@ -592,7 +638,6 @@ class DriverMonitoringSystem:
         method = "MediaPipe" if result.get('method') == 'mediapipe' else "YOLO"
         cv2.putText(display, f"Method: {method}", (w-100, 45),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
-        
         # ====================================================================
         # Confidence Bar (Bottom)
         # ====================================================================
@@ -600,6 +645,7 @@ class DriverMonitoringSystem:
         bar_width = int(w * confidence)
         cv2.rectangle(display, (0, h-10), (bar_width, h), (0, 255, 0), -1)
         cv2.rectangle(display, (0, h-10), (w, h), (255, 255, 255), 1)
+
         
         return display
     
@@ -618,11 +664,9 @@ class DriverMonitoringSystem:
             if self.frame_count % 100 == 0:
                 avg_time = np.mean(self.processing_times[-100:]) if self.processing_times else 0
                 self.logger.info(f"Stats - Frame: {self.frame_count}, FPS: {fps}, Avg Time: {avg_time:.1f}ms")
-    
     # ========================================================================
     # Main Loop
     # ========================================================================
-    
     def run(self):
         """Main application loop"""
         # Initialize camera
