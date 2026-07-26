@@ -1,90 +1,84 @@
-from typing import Dict, Any
 from ml.classifiers.base_classifier import BaseClassifier
-
-
+from core.features_vector import FeatureVector
+from calibration.calibration_manager import DriverProfile
+from core.features_vector import FeatureVector
+from core.data_types import Prediction,DrowsinessLevel
 class RuleBasedClassifier(BaseClassifier):
-    """
-    Classifier مبتنی بر قانون (Rule-Based)
-    متد predict را مطابق با فراخوانی main.py پیاده‌سازی می‌کند.
-    """
+    
+    def __init__(self, profile: DriverProfile | None = None):
+        
 
-    def __init__(self,
-                 ear_threshold: float = 0.25,
-                 mar_threshold: float = 0.25,
-                 drowsy_frame_threshold: int = 60):
-        super().__init__()
-        print(
-        f"[RULE INIT] ear_threshold={ear_threshold}, "
-        f"mar_threshold={mar_threshold}, "
-        f"drowsy_frame_threshold={drowsy_frame_threshold}"
-    )
-            
-        self.ear_threshold = ear_threshold
-        self.mar_threshold = mar_threshold
-        self.drowsy_frame_threshold = drowsy_frame_threshold
+        self.score_threshold = 60
+        self.profile = profile
+        self.perclos_threshold = 0.35
+        self.closed_duration_threshold = 2.0
+        self.yawn_duration_threshold = 1.5
+        self.head_down_frames_threshold = 20
+        self.blink_rate_threshold = 30
+    def predict(self, features:FeatureVector):
+        score = 0
+        reasons = []
+        if features.average_ear<self.profile.ear_threshold:
+            score+=25
+            reasons.append("low_ear")
+        if features.perclos > self.perclos_threshold:
+            score += 25
+            reasons.append("high_perclos")
+        if features.closed_duration > self.closed_duration_threshold:
+            score += 20
+            reasons.append("eyes_closed")
+        if features.blink_rate > self.blink_rate_threshold:
+            score += 10
+            reasons.append("high_blink_rate")
+        if features.yawn_duration > self.yawn_duration_threshold:
+            score += 10
+            reasons.append("yawning")
+        if features.head_down_frames > self.head_down_frames_threshold:
+            score += 10
+            reasons.append("head_down")
+        confidence = min(score / 100.0, 1.0)
+        # تعیین level
+        if features.closed_duration >= 3:
 
-        self.closed_eye_counter = 0
-        self.yawn_counter = 0
+            level = DrowsinessLevel.DROWSY
 
-    def update(self, features: Dict[str, Any]) -> Dict[str, Any]:
-        """نسخه update (اختیاری)"""
-        return self.predict(
-            ear_status={'is_closed': features.get('is_eye_closed', False), 'ear': features.get('ear', 0.0)},
-            mar_status={'yawn_detected': features.get('yawn_detected', False)},
-            blink_status={'blink_rate': features.get('blink_rate', 0.0)}
+
+        elif score >= 60:
+
+            level = DrowsinessLevel.SEVERE
+
+
+        elif score >= 40:
+
+            level = DrowsinessLevel.MODERATE
+
+
+        elif score >= 20:
+
+            level = DrowsinessLevel.LIGHT
+
+
+        else:
+
+            level = DrowsinessLevel.ALERT
+ 
+
+        return Prediction(
+
+            is_drowsy = score >= self.score_threshold,
+
+            confidence = confidence,
+
+            level = level,
+
+            classifier_name="RuleBased",
+
+            reason=", ".join(reasons)
+
         )
+    def reset(self):
+            """
+            Reset classifier internal states
+            """
+            pass
 
-    def predict(self,
-                ear_status: Dict[str, Any],
-                mar_status: Dict[str, Any],
-                blink_status: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        ورودی: سه دیکشنری ear_status, mar_status, blink_status
-        خروجی: دیکشنری prediction مطابق نیاز main.py
-        """
-        ear = ear_status.get('ear', 0.0)
-        is_eye_closed = ear_status.get('is_closed', False)
-        yawn_detected = mar_status.get('yawn_detected', False)
-        blink_rate = blink_status.get('blink_rate', 0.0)
-
-        # شمارش چشم بسته
-        if ear < self.ear_threshold or is_eye_closed:
-            self.closed_eye_counter += 1
-        else:
-            self.closed_eye_counter = 0
-
-        # شمارش خمیازه
-        if yawn_detected:
-            self.yawn_counter += 1
-        else:
-            self.yawn_counter = max(0, self.yawn_counter - 1)
-
-        # تصمیم‌گیری نهایی
-        is_drowsy = False
-        confidence = 0.0
-        level = "normal"
-
-        if self.closed_eye_counter >= self.drowsy_frame_threshold:
-            is_drowsy = True
-            confidence = min(0.95, 0.65 + (self.closed_eye_counter - self.drowsy_frame_threshold) * 0.025)
-            level = "drowsy"
-        elif self.yawn_counter >= 20:
-            is_drowsy = True
-            confidence = 0.78
-            level = "yawning"
-        elif blink_rate > 28:
-            is_drowsy = True
-            confidence = 0.65
-            level = "high_blink"
-
-        return {
-            'blink_rate': blink_rate,
-            'is_drowsy': is_drowsy,
-            'is_yawning': yawn_detected,
-            'confidence': round(confidence, 2),
-            'level': level
-        }
-
-    def reset(self) -> None:
-        self.closed_eye_counter = 0
-        self.yawn_counter = 0

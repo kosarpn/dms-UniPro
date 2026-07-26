@@ -22,9 +22,9 @@ import sys
 from pathlib import Path
 from typing import Optional
 import numpy as np
-from features.ear import calculate_ear
-from features.ear import calculate_average_ear
-from features.mar import calculate_mar
+#برای مقایسه cpu usage
+
+
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 # ============================================================================
@@ -49,18 +49,20 @@ from detectors.hybrid_detector import HybridDetector
 from depth.midas_depth import MiDASDepthEstimator
 # Driver Selection Layer
 from selection.hybrid_selector import HybridDriverSelector
-# Feature Extraction Layer
-from features.ear import EyeAspectRatioAnalyzer
-from features.mar import MouthAspectRatioAnalyzer
-from features.head_pose import HeadPoseEstimator
+# # Feature Extraction Layer
+# from features.ear import EyeAspectRatioAnalyzer
+# from features.mar import MouthAspectRatioAnalyzer
+# from features.head_pose import HeadPoseEstimator
+from features.extractor import FeatureExtractor
+from core.data_types import EyeData, MouthData, HeadPoseData
+from core.features_vector import build_feature_vector
 
 # Alert Layer
 from alerts.alert_manager import AlertManager
 
 #import کردن classifier ها
 from ml.classifiers.rule_based_classifier import RuleBasedClassifier
-# from ml.classifiers.svm_classifier import SVMClassifier
-from ml.feature_extractor import FeaturExtractor
+from ml.classifiers.svm_classifier import SVMClassifier
 # ============================================================================
 # Main Application Class
 # ============================================================================
@@ -110,7 +112,6 @@ class DriverMonitoringSystem:
         self.depth_estimator = MiDASDepthEstimator(
             model_type=self.config.DEPTH_MODEL_TYPE
         ) if self.config.ENABLE_DEPTH_ESTIMATION else None
-        self.head_pose_estimator=HeadPoseEstimator()
         
         # ====================================================================
         # Layer 3: Calibration Components
@@ -146,26 +147,14 @@ class DriverMonitoringSystem:
         # Layer 5: Feature Analysis
         # ====================================================================
         self.logger.info("Initializing feature analyzers...")
-        self.ear_analyzer = EyeAspectRatioAnalyzer(
-            history_size=self.config.EAR_HISTORY_SIZE,
-            fps=self.config.CAMERA_FPS,          
-            drowsy_duration_sec=5.0
-        )
-        self.mar_analyzer = MouthAspectRatioAnalyzer(
-            yawn_threshold=self.config.MAR_THRESHOLD,
-        )
-        self.classifier=RuleBasedClassifier(
-            ear_threshold=self.config.EAR_THRESHOLD,
-            mar_threshold=self.config.MAR_THRESHOLD,
-            drowsy_frame_threshold=self.config.DROWSY_FRAME_THRESHOLD
-        )
-        # self.classifier=SVMClassifier()
-        self.feature_extractor=FeaturExtractor()
-        self.head_pose_estimator = HeadPoseEstimator()
+        self.feature_extractor = FeatureExtractor()
+        self.classifiers={}
+       
         # ====================================================================
         # Layer 6: Signal Processing
         # ====================================================================
         self.logger.info("Initializing signal processing...")
+   
         self.kalman_filter = AdaptiveKalmanFilter()
         # ====================================================================
         # Layer 7: Alert System
@@ -196,7 +185,10 @@ class DriverMonitoringSystem:
         self._setup_signal_handlers()
         
         self.logger.info("✅ All components initialized successfully!")
-    
+        # ====================================================================
+        # For comparing the  real-time metrics on  methods
+        # ====================================================================
+
     # ========================================================================
     # Configuration Methods
     # ========================================================================
@@ -287,16 +279,29 @@ class DriverMonitoringSystem:
             if result.landmarks is not None:
                 print("LANDMARKS:", result.landmarks.shape)
             if result.success and result.landmarks is not None:
-                # Extract EAR from landmarks
-                ear_value = self._extract_ear_from_landmarks(result.landmarks)
-                
+
+                (
+                    feature_vector,
+                    eye_data,
+                    mouth_data,
+                    head_pose_data
+
+                ) = self.feature_extractor.extract(
+                    result.landmarks,
+                    frame.shape
+                )
+
+
+                ear_value = eye_data.average_ear
+
+
                 self.calibration_manager.add_frame(
                     ear=ear_value,
                     face_bbox=result.face_bbox,
                     eye_distance=None
                 )
                 calibration_frames.append(result.face_bbox)
-            
+                
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 return False
         
@@ -306,6 +311,13 @@ class DriverMonitoringSystem:
             self.current_driver_id = driver_id
             self.current_driver_profile = profile
             self.is_calibrated = True
+            self.classifiers = {
+            "rule_based": RuleBasedClassifier(
+                profile=self.current_driver_profile
+            ),
+
+            "svm": SVMClassifier()
+        }
             
             # Update driver selector with calibrated range
             if hasattr(profile, 'driver_x_range'):
@@ -344,10 +356,15 @@ class DriverMonitoringSystem:
             'driver_selected': False,
             'ear': 0.0,
             'mar': 0.0,
+            'closed_duration':0.0,
+            'perclos':0.0,
+            'head_pose':None,
             'blink_rate':0.0,
             'blink_state':"normal",
             'is_drowsy': False,
             'is_yawning': False,
+            'confidence': 0.0,
+            'level': "normal",
             'processing_time_ms': 0.0
         }
         # ====================================================================
@@ -360,6 +377,8 @@ class DriverMonitoringSystem:
         result['face_detected'] = True
         landmarks = detection_result.landmarks
         face_bbox = detection_result.face_bbox
+        result["method"] = detection_result.method_used.value
+
         # ====================================================================
         # Step 2: Depth Estimation (if enabled)
         # ====================================================================
@@ -380,96 +399,82 @@ class DriverMonitoringSystem:
         if driver_idx is None:
             return result
         result['driver_selected'] = True
-        # ====================================================================
+       
+     # ======================================================
         # Step 4: Feature Extraction
-        # ====================================================================
-        result['method']=detection_result.method_used.value
-        # ------------------------------------------------
-        # MEDIAPIPE MODE
-        # ------------------------------------------------
-        """این بخش رو بعد کامنت کن چون میخوام بخشی شو از چون که extractor.py رو  اضافه میکنیم 
-        """
+        # ======================================================
+
         if detection_result.method_used==detection_result.method_used.MEDIAPIPE:
-            #EAR
-            ear_value=self._extract_ear_from_landmarks(landmarks)
-            filtered_ear=self.kalman_filter.update_ear(ear_value)
-            result['ear']=filtered_ear
-            #MAR
-            mar_value=self._extract_mar_from_landmarks(landmarks)
-            filtered_mar=self.kalman_filter.update_mar(mar_value)
-            result['mar']=filtered_mar
-            MOUTH_OUTER = [
-                61, 185, 40, 39, 37, 0, 267, 269, 270, 409,
-                291, 375, 321, 405, 314, 17, 84, 181, 91, 146
-            ]
-            mouth_landmarks = landmarks[MOUTH_OUTER]
-            #Head pose
+
+            (
+                feature_vector,
+                eye_data,
+                mouth_data,
+                head_pose_data
+
+            ) = self.feature_extractor.extract(
+                landmarks,
+                frame.shape
+            )
+            # Eye features
+            result["ear"] = eye_data.average_ear
+            result["blink_rate"] = eye_data.blink_rate
+            result["blink_count"] = eye_data.blink_count
+            result["closed_duration"] = eye_data.closed_duration
+            result["perclos"] = eye_data.perclos
+            # Mouth features
+            result["mar"] = mouth_data.mar
+            result["is_yawning"] = mouth_data.is_yawning
+            # Head pose
+            result["head_pose"] = head_pose_data
+
             # ====================================================================
             # Step 5: Drowsiness Detection
             # ====================================================================
-            ear_threshold = (
-                self.calibration_manager.get_current_threshold()
-                if self.is_calibrated
-                else 0.25
-            )
-            self.ear_analyzer.set_threshold(ear_threshold)
-            ear_status = self.ear_analyzer.update(filtered_ear)
             
-            mar_status = self.mar_analyzer.update(filtered_mar, mouth_landmarks)
-            
-            head_pose = self.head_pose_estimator.estimate(
-               landmarks,
-                frame.shape
-            )
-            result["head_pose"]=head_pose
-            blink_status = {
-                "blink_rate":ear_status["blink_rate"],
-                "blink_count":ear_status["blink_count"]
-            }
-            print(
-                "Blink:",
-                ear_status["blink_rate"],
-                "count:",
-                ear_status["blink_count"]
-            )
-            prediction = self.classifier.predict(
-                ear_status=ear_status,
-                mar_status=mar_status,
-                blink_status=blink_status,
-            )
-            # dataset_features = self.feature_extractor.extract(ear_status=ear_status,
-            #                                                   mar_status=mar_status,
-            #                                                   head_pose=head_pose)
-            # if dataset_features is None:
-            #     return result
-            # prediction = self.classifier.predict(
-            #     dataset_features)
-            result["blink_rate"] = prediction["blink_rate"]
-            result["is_drowsy"] = prediction["is_drowsy"]
-            result["is_yawning"] = prediction["is_yawning"]
-            result["confidence"] = prediction["confidence"]
-            result["level"] = prediction["level"]
+            # prediction = self.classifiers.predict(feature_vector)
+            classifier_results={}
+            for name,clf in self.classifiers.items():
+                start=time.time()
+                prediction=clf.predict(feature_vector)
+                interface_time=(
+                    time.time()-start
+                )*1000
+                classifier_results[name]={
+                      "is_drowsy":
+                        prediction.is_drowsy,
 
-            # ear_drowsy=(
-            #     ear_status['is_drowsy']
-            # )
-            # is_drowsy=ear_drowsy 
-            print(f"EAR : {filtered_ear:.3f}")
-            print(f"MAR : {filtered_mar:.3f}")
-            # print(f"Blink Rate : {prediction['blink_rate']:.1f}")
-            print(f"Drowsy : {prediction['is_drowsy']}")
-            # print(f"Yawn : {prediction['is_yawning']}")
-            print(f"Confidence : {prediction['confidence']:.2f}")
-            # print(f"Level : {prediction['level']}")
-            print("----------------------------")
+                    "confidence":
+                        prediction.confidence,
+
+                    "level":
+                        prediction.level.value,
+
+                    "time_ms":
+                        interface_time
+}
+                result["classifier_results"]={}
+                for name,clf in self.classifiers.items():
+                    start=time.time()
+
+                    prediction = clf.predict(feature_vector)
+
+                    inference_time = (time.time()-start)*1000
+
+                    result["classifier_results"][name] = {
+                        "is_drowsy": prediction.is_drowsy,
+                        "confidence": prediction.confidence,
+                        "level": prediction.level.value,
+                        "time_ms": inference_time
+                    }          
         # ------------------------------------------------
         # YOLO FALLBACK MODE
         # ------------------------------------------------
         else:
-            result['ear']=0.0
-            result['mar']=0.0
-            result['is_drowsy']=False
-            result['is_yawning']=False
+                result['ear']=0.0
+                result['mar']=0.0
+                result['is_drowsy']=False
+                result['is_yawning']=False
         # ====================================================================
         # Step 6: Alert Management
         # ====================================================================
@@ -487,50 +492,7 @@ class DriverMonitoringSystem:
         result['processing_time_ms'] = (time.time() - start_time) * 1000
         result['success'] = True
         return result
-    # ========================================================================
-    # Feature Extraction Helpers
-    # ========================================================================
-    def _extract_ear_from_landmarks(self, landmarks: np.ndarray) -> float:
-        """Extract EAR value from face landmarks"""
-        """MediaPipe 468-point indices"""
-        LEFT_EYE  = [33, 160, 158, 133, 153, 144]
-        RIGHT_EYE = [362, 385, 387, 263, 373, 380]
-        try:
-            left_eye=landmarks[LEFT_EYE]
-            right_eye=landmarks[RIGHT_EYE]
-            return calculate_average_ear(left_eye,right_eye)
-        except Exception as e:
-            self.logger.warning(f"EAR extraction failed: {e}")
-            return 0.0 
-    def _extract_mar_from_landmarks(self, landmarks: np.ndarray) -> float:
-        """Extract MAR value from face landmarks"""
-        if landmarks is None or len(landmarks)<468:
-            return None
-#         MOUTH_INDICES = [
-#         61,   # left corner
-#         13,   # upper inner lip
-#         14,   # lower inner lip
-#         291   # right cornerّ
-# ]
-        # MediaPipe MOUTH_OUTER indices (20 points)
-        MOUTH_OUTER = [
-            61, 185, 40, 39, 37, 0, 267, 269, 270, 409,  # Upper lip
-            291, 375, 321, 405, 314, 17, 84, 181, 91, 146  # Lower lip
-        ]
-        try:
-            mouth_landmarks=landmarks[MOUTH_OUTER]
-            return calculate_mar(mouth_landmarks)
-        except Exception as e:
-            self.logger.error(f"MAR extraction failed:{e}")
-            return 0.0
-    def _extract_head_pose_from_landmarks(self, landmarks: np.ndarray) -> dict:
-        """Extract head pose (yaw, pitch, roll) from landmarks"""
-        try:
-            # Placeholder
-            return {'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
-        except:
-            return {'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
-    
+  
     # ========================================================================
     # Visualization
     # ========================================================================
@@ -573,37 +535,32 @@ class DriverMonitoringSystem:
         # MAR value
         cv2.putText(display, f"MAR: {result['mar']:.3f}", (10, 85),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        if "head_pose" in result:
+        if result.get("head_pose") is not None:
             hp = result["head_pose"]
             cv2.putText(
                 display,
-                f"Pitch: {hp['pitch']:.1f}",
+                f"Pitch: {hp.pitch:.1f}",
                 (10,125),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
                 (0,255,255),
-                1
-            )
-
+                1)
             cv2.putText(
                 display,
-                f"Yaw: {hp['yaw']:.1f}",
+                f"Yaw: {hp.yaw:.1f}",
                 (10,145),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
                 (0,255,255),
-                1
-            )
-
+                1)
             cv2.putText(
                 display,
-                f"Roll: {hp['roll']:.1f}",
+                f"Roll: {hp.roll:.1f}",
                 (10,165),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
                 (0,255,255),
-                1
-            )
+                1)
                 
             cv2.putText(
                 display,f"Blink Rate:{result['blink_rate']:.1f}/min ({result['blink_state']})",
@@ -613,6 +570,31 @@ class DriverMonitoringSystem:
                 (255,255,0),
                 2
             )
+
+            if "classifier_results" in result:
+
+                y = 220
+
+                for name,data in result["classifier_results"].items():
+
+                    text = (
+                        f"{name}: "
+                        f"{data['is_drowsy']} "
+                        f"{data['confidence']:.2f} "
+                        f"{data['time_ms']:.2f}ms"
+                    )
+
+                    cv2.putText(
+                        display,
+                        text,
+                        (10,y),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (255,255,255),
+                        1
+                    )
+
+                    y += 20
         # Processing time
         cv2.putText(display, f"Time: {result['processing_time_ms']:.1f}ms", (10, 105),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)

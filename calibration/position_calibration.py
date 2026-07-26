@@ -17,7 +17,6 @@ class PositionCalibration:
         self.driver_y_range = (0, frame_height)  # محدوده طبیعی Y
         self.driver_center_x = frame_width / 2
         self.driver_center_y = frame_height / 2
-        
     def calibrate(self, face_bboxes: list):
         """
         کالیبراسیون موقعیت از چند فریم

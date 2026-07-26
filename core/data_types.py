@@ -47,7 +47,7 @@ class DrowsinessLevel(Enum):
     LIGHT = "light_drowsy"     # خواب‌آلودگی خفیف (30-50%)
     MODERATE = "moderate"      # خواب‌آلودگی متوسط (50-70%)
     SEVERE = "severe"          # خواب‌آلودگی شدید (70-90%)
-    CRITICAL = "critical"      # بحرانی (90-100%)
+    DROWSY = "drowsy"      # بحرانی (90-100%)
 # ============================================================================
 # Data Classes (DTOs)
 # ============================================================================
@@ -56,10 +56,14 @@ class HeadPoseData:
     yaw: float
     pitch: float
     roll: float
-    status: HeadPoseStatus = HeadPoseStatus.NORMAL
+
+    is_head_down: bool = False
+    head_down_frames: int = 0
+
+    is_head_left: bool = False
+    is_head_right: bool = False
+
     confidence: float = 1.0
-    is_nodding: bool = False
-    nodding_frequency: float = 0.0
 @dataclass
 class GazeData:
     direction: GazeDirection
@@ -77,22 +81,17 @@ class EyeData:
     blink_rate:float=0.0
     closed_duration:float=0.0
     perclos:float=0.0
-
 @dataclass
 class MouthData:
     mar: float
     average_mar: float
     max_mar: float
-
     mouth_width: float
     mouth_height: float
-
     is_yawning: bool
     yawn_detected: bool
-
     yawn_duration: float
     yawn_count: int
-
     speaking_detected: bool
     smile_detected: bool
 @dataclass
@@ -103,6 +102,9 @@ class Prediction:
     is_drowsy:bool
     confidence:float
     level:DrowsinessLevel
+    classifier_name: str
     reason:str=""
+    inference_time_ms: float = 0.0
+
 
 

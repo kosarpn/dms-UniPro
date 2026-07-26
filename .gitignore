@@ -30,3 +30,10 @@ env/
 # OS files
 Thumbs.db
 .DS_Store
+# Deep learning weights
+*.pt
+# Dlib model
+*.dat
+# Debug
+main_degbug.py
+*_debug.py

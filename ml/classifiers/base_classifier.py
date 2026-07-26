@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any
 
 from core.features_vector import FeatureVector
+from core.data_types import Prediction
 
 
 class BaseClassifier(ABC):
@@ -20,7 +21,7 @@ class BaseClassifier(ABC):
     def predict(
         self,
         features: FeatureVector
-    ) -> Dict[str, Any]:
+    ) -> Prediction:
         """
         Predict driver state.
         Parameters
