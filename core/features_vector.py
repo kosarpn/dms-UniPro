@@ -38,7 +38,6 @@ class FeatureVector:
     # Convert to numpy
     # =========================================
     def to_numpy(self) -> np.ndarray:
-
         return np.array([
             # Eye
             self.ear,
@@ -47,7 +46,6 @@ class FeatureVector:
             self.perclos,
             self.closed_duration,
             self.is_eye_closed,
-
             # Mouth
             self.mar,
             self.average_mar,

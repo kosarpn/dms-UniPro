@@ -108,19 +108,11 @@ class RFClassifier(BaseClassifier):
         self.model = joblib.load(
             path
         )
-
-
-
     # ============================
     # Reset
     # ============================
-
     def reset(self):
-
         pass
-
-
-
     # ============================
     # Offline Evaluation Helper
     # ============================

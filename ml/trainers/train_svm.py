@@ -218,7 +218,6 @@ class SVMTrainer:
             model_dir="models"
     ):
 
-
         model_dir = Path(
             model_dir
         )
@@ -240,38 +239,23 @@ class SVMTrainer:
             self.scaler,
             model_dir / "svm_scaler.pkl"
         )
-
-
         print(
             "\nModel saved:"
         )
-
-
         print(
             model_dir / "svm_model.pkl"
         )
-
         print(
             model_dir / "svm_scaler.pkl"
         )
-
-
-
 # ==========================================
 # Main
 # ==========================================
-
 def main():
-
-
     trainer = SVMTrainer()
-
-
     trainer.load_dataset(
         "data/processed/dataset.csv"
     )
-
-
     trainer.prepare_data()
     trainer.split_data()
     trainer.scale_features()

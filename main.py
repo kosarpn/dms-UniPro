@@ -26,7 +26,6 @@ from detectors.hybrid_detector import HybridDetector
 from depth.midas_depth import MiDASDepthEstimator
 # Driver Selection Layer
 from selection.hybrid_selector import HybridDriverSelector
-
 from features.extractor import FeatureExtractor
 from core.data_types import EyeData, MouthData, HeadPoseData
 from core.features_vector import build_feature_vector
@@ -100,18 +99,15 @@ class DriverMonitoringSystem:
         self.logger.info("Initializing feature analyzers...")
         self.feature_extractor = FeatureExtractor()
         self.classifiers={}
-       
         # ====================================================================
         # Layer 6: Signal Processing
         # ====================================================================
         self.logger.info("Initializing signal processing...")
-   
         self.kalman_filter = AdaptiveKalmanFilter()
         # ====================================================================
         # Layer 7: Alert System
         # ====================================================================
         self.logger.info("Initializing alert system...")
-        
         self.alert_manager = AlertManager(
             audio_enabled=self.config.AUDIO_ALERTS,
             visual_enabled=self.config.VISUAL_ALERTS,
@@ -124,7 +120,6 @@ class DriverMonitoringSystem:
         self.is_calibrated = False
         self.current_driver_id: Optional[str] = None
         self.current_driver_profile = None
-        
         # Statistics
         self.frame_count = 0
         self.fps_counter = 0
@@ -134,8 +129,7 @@ class DriverMonitoringSystem:
         # Layer 9: Signal Handlers
         # ====================================================================
         self._setup_signal_handlers()
-        
-        self.logger.info("✅ All components initialized successfully!")
+        self.logger.info(".....All components initialized successfully!")
         self.current_fps=0
 
     # ========================================================================
@@ -152,7 +146,6 @@ class DriverMonitoringSystem:
     # ========================================================================
     # Signal Handling
     # ========================================================================
-    
     def _setup_signal_handlers(self):
         """Setup graceful shutdown handlers"""
         def signal_handler(signum, frame):
@@ -260,16 +253,16 @@ class DriverMonitoringSystem:
             ),
 
             "svm": SVMClassifier(),
+            "rf":RFClassifier()
+           
 
         }
-            
             # Update driver selector with calibrated range
             if hasattr(profile, 'driver_x_range'):
                 self.driver_selector.set_driver_range(
                     profile.driver_x_range,
                     profile.driver_y_range
                 )
-            
             cv2.destroyWindow("Calibration")
             self.logger.info(f" Calibration complete for driver: {driver_id}")
             return True
@@ -283,7 +276,7 @@ class DriverMonitoringSystem:
         """
         Complete frame processing pipeline
         Pipeline steps:
-        1. Face detection (Hybrid: MediaPipe → YOLO)
+        1. Face detection ( MediaPipe )
         2. Depth estimation (MiDAS)
         3. Driver selection
         4. Feature extraction (EAR, MAR, Head Pose)
@@ -322,7 +315,6 @@ class DriverMonitoringSystem:
         landmarks = detection_result.landmarks
         face_bbox = detection_result.face_bbox
         result["method"] = detection_result.method_used.value
-
         # ====================================================================
         # Step 2: Depth Estimation (if enabled)
         # ====================================================================
@@ -387,9 +379,14 @@ class DriverMonitoringSystem:
                         "confidence": prediction.confidence,
                         "level": prediction.level.value,
                         "time_ms": inference_time
-                    }          
+                    }     
+            if "rule_based" in result["classifier_results"]:
+                rule_result = result["classifier_results"]["rule_based"]
+                result["is_drowsy"] = rule_result["is_drowsy"]
+                result["confidence"] = rule_result["confidence"]
+                result["level"] = rule_result["level"]     
         # ------------------------------------------------
-        # YOLO FALLBACK MODE
+        # FALLBACK MODE
         # ------------------------------------------------
         else:
                 result['ear']=0.0
@@ -404,7 +401,6 @@ class DriverMonitoringSystem:
                 confidence=result.get("confidence", 0.8),
                 ear_value=result.get("ear", 0.0)
             )
-
         elif result["is_yawning"]:
             self.alert_manager.trigger_yawn_alert()
         # ====================================================================
@@ -548,11 +544,9 @@ class DriverMonitoringSystem:
         cv2.rectangle(display, (0, h-10), (bar_width, h), (0, 255, 0), -1)
         cv2.rectangle(display, (0, h-10), (w, h), (255, 255, 255), 1)
         return display
-    
     # ========================================================================
     # Statistics & Logging
     # ========================================================================
-    
     def _update_fps(self):
         """Update FPS counter"""
 
@@ -650,7 +644,7 @@ class DriverMonitoringSystem:
         self.logger.info(f"  - Average processing time: {np.mean(self.processing_times):.1f}ms" if self.processing_times else "  - N/A")
         self.logger.info(f"  - Calibrated: {self.is_calibrated}")
         self.logger.info("=" * 60)
-        self.logger.info("✅ System shutdown complete")
+        self.logger.info("System shutdown complete")
 # ============================================================================
 # Entry Point
 # ============================================================================

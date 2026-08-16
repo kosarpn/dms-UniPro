@@ -7,3 +7,12 @@ torch==2.13.0
 pillow==12.3.0
 pandas==3.0.3
 matplotlib==3.11.1
+mediapipe==0.10.21
+pandas==3.0.3
+pillow==12.3.0
+opencv-contrib-python==4.11.0.86
+scikit-learn==1.9.0
+
+
+
+

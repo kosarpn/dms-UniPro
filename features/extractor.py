@@ -1,28 +1,21 @@
 from features.ear import EyeAspectRatioAnalyzer
 from features.mar import MouthAspectRatioAnalyzer
 from features.head_pose import HeadPoseEstimator
-
 import numpy as np
-
 from core.data_types import (
     EyeData,
     MouthData,
     HeadPoseData,
 )
-
 from core.features_vector import build_feature_vector
-
-
 from features.ear import (
     calculate_average_ear,
 )
-
 from features.mar import (
     calculate_mar,
     extract_mouth_points,
 )
-
-
+from utils.kalman_filter import AdaptiveKalmanFilter
 # MediaPipe FaceMesh indices
 
 LEFT_EYE = [
@@ -72,6 +65,7 @@ class FeatureExtractor:
             mouth_data,
             head_pose_data
         """
+        self.ema_filter = AdaptiveKalmanFilter()
 
 
         # =====================================================
@@ -88,15 +82,18 @@ class FeatureExtractor:
             right_eye
         )
 
+       
 
         ear_result = self.ear_analyzer.update(
             ear_value
         )
-
+        filtered_ear = self.ema_filter.update_ear(
+                    ear_result["ear"]
+                )
 
         eye_data = EyeData(
 
-            ear=ear_result["ear"],
+            ear=filtered_ear,
 
             average_ear=
                 ear_result["average_ear"],
@@ -137,18 +134,23 @@ class FeatureExtractor:
         mar_value = calculate_mar(
             mouth_points
         )
-
+      
+     
 
         mar_result = self.mar_analyzer.update(
             mar_value,
             mouth_points
         )
 
+        filtered_mar = self.ema_filter.update_mar(
+                        mar_result["mar"]
+                    )
+
 
         mouth_data = MouthData(
 
             mar=
-                mar_result["mar"],
+                filtered_mar,
 
 
             average_mar=

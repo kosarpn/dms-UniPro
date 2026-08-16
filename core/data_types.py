@@ -1,11 +1,9 @@
 
 from enum import Enum
 from dataclasses import dataclass
-
 # ============================================================================
 # Enums
 # ============================================================================
-
 class HeadPoseStatus(Enum):
     """وضعیت سر"""
     NORMAL = "normal"          # وضعیت عادی

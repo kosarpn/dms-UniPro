@@ -1,15 +1,11 @@
 import joblib
 from pathlib import Path
 import numpy as np
-
 from sklearn.svm import SVC
-
 from ml.classifiers.base_classifier import BaseClassifier
 from core.data_types import DrowsinessLevel
-
 from core.features_vector import FeatureVector
 from core.data_types import Prediction
-
 class SVMClassifier(BaseClassifier):
     def __init__(
         self,
@@ -18,7 +14,6 @@ class SVMClassifier(BaseClassifier):
     ):
         self.model = None
         self.scaler = None
-
         self.model_path = Path(model_path)
         self.scaler_path = Path(scaler_path)
         if self.model_path.exists() and self.scaler_path.exists():
@@ -50,7 +45,6 @@ class SVMClassifier(BaseClassifier):
             probability=True,
             random_state=42
         )
-
         self.model.fit(
             X,
             y
@@ -78,10 +72,6 @@ class SVMClassifier(BaseClassifier):
         prediction = int(
             self.model.predict(x)[0]
         )
-        # probability = self.model.predict_proba(x)[0]
-        # confidence = float(
-        #     np.max(probability)
-        # )
         score = self.model.decision_function(x)[0]
         confidence = abs(score)
         return Prediction(
@@ -101,23 +91,17 @@ class SVMClassifier(BaseClassifier):
     # -----------------------------
     # Persistence
     # -----------------------------
-
     def save(
         self,
         model_path=None,
         scaler_path=None
     ):
-
         model_path = model_path or self.model_path
         scaler_path = scaler_path or self.scaler_path
-
-
         joblib.dump(
             self.model,
             model_path
         )
-
-
         if self.scaler:
             joblib.dump(
                 self.scaler,

@@ -84,12 +84,9 @@ print("Accuracy :", accuracy_score(y_test, svm_pred))
 print("Precision:", precision_score(y_test, svm_pred))
 print("Recall   :", recall_score(y_test, svm_pred))
 print("F1       :", f1_score(y_test, svm_pred))
-
-
 # ==========================================
 # Random Forest
 # ==========================================
-
 rf = RFClassifier()
 rf_pred = rf.predict_batch(X_test)
 print("\n" + "=" * 40)
@@ -130,5 +127,4 @@ results.to_csv(
     results_dir / "evaluation_results.csv",
     index=False
 )
-
 print(results)

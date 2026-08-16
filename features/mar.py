@@ -183,9 +183,6 @@ class MouthAspectRatioAnalyzer:
 
     
     
-
-
-
     def get_mar_history(self) -> List[float]:
         """دریافت تاریخچه MAR"""
         return self.mar_history.copy()

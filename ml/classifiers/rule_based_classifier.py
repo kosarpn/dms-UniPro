@@ -4,10 +4,7 @@ from calibration.calibration_manager import DriverProfile
 from core.features_vector import FeatureVector
 from core.data_types import Prediction,DrowsinessLevel
 class RuleBasedClassifier(BaseClassifier):
-    
     def __init__(self, profile: DriverProfile | None = None):
-        
-
         self.score_threshold = 60
         self.profile = profile
         self.perclos_threshold = 0.35
@@ -41,25 +38,18 @@ class RuleBasedClassifier(BaseClassifier):
         if features.closed_duration >= 3:
             level = DrowsinessLevel.DROWSY
         elif score >= 60:
-
             level = DrowsinessLevel.SEVERE
         elif score >= 40:
-
             level = DrowsinessLevel.MODERATE
         elif score >= 20:
             level = DrowsinessLevel.LIGHT
         else:
             level = DrowsinessLevel.ALERT
         return Prediction(
-
             is_drowsy = score >= self.score_threshold,
-
             confidence = confidence,
-
             level = level,
-
             classifier_name="RuleBased",
-
             reason=", ".join(reasons))
     def reset(self):
             """
