@@ -13,9 +13,7 @@ from sklearn.metrics import (
     accuracy_score,
     classification_report,
     confusion_matrix,
-    f1_score
-)
-
+    f1_score)
 class SVMTrainer:
     FEATURES = [
         "ear",
@@ -33,15 +31,10 @@ class SVMTrainer:
             kernel="rbf",
             C=1.0,
             gamma="scale",
-            probability=True,
+            probability=False,
             random_state=42
         )
-
-
         self.scaler = StandardScaler()
-
-
-
     # ==========================================
     # Load Dataset
     # ==========================================
@@ -70,29 +63,18 @@ class SVMTrainer:
             ,
             self.df.shape
         )
-
-
-
     # ==========================================
     # Prepare X , y
     # ==========================================
-
     def prepare_data(self):
-
-
         missing = [
             f for f in self.FEATURES
             if f not in self.df.columns
         ]
-
-
         if missing:
             raise ValueError(
                 f"Missing features: {missing}"
             )
-
-
-
         self.X = self.df[
             self.FEATURES
         ]
@@ -106,13 +88,9 @@ class SVMTrainer:
 
         print("\nFeatures:")
         print(self.FEATURES)
-
-
-
     # ==========================================
     # Split
     # ==========================================
-
     def split_data(self):
 
 
@@ -134,27 +112,16 @@ class SVMTrainer:
             stratify=self.y
 
         )
-
-
-
     # ==========================================
     # Scaling
     # ==========================================
-
     def scale_features(self):
-
-
         self.X_train = self.scaler.fit_transform(
             self.X_train
         )
-
-
         self.X_test = self.scaler.transform(
             self.X_test
         )
-
-
-
     # ==========================================
     # Train
     # ==========================================
@@ -242,9 +209,6 @@ class SVMTrainer:
                 predictions
             )
         )
-
-
-
     # ==========================================
     # Save
     # ==========================================

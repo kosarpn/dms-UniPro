@@ -35,7 +35,6 @@ def calculate_ear(eye_landmarks: np.ndarray) -> float:
     
     if horizontal == 0:
         return 0.28
-    
     ear = (vertical_1 + vertical_2) / (2.0 * horizontal)
     
     # محدود کردن به محدوده منطقی
@@ -44,38 +43,19 @@ def calculate_ear(eye_landmarks: np.ndarray) -> float:
 
 def calculate_average_ear(left_eye_landmarks: np.ndarray, 
                           right_eye_landmarks: np.ndarray) -> float:
-    """
-    محاسبه میانگین EAR هر دو چشم
-    
-    Args:
-        left_eye_landmarks: 6 نقطه چشم چپ
-        right_eye_landmarks: 6 نقطه چشم راست
-        
-    Returns:
-        میانگین EAR دو چشم
-    """
+  
     left_ear = calculate_ear(left_eye_landmarks)
     right_ear = calculate_ear(right_eye_landmarks)
     return (left_ear + right_ear) / 2.0
 
 
 class EyeAspectRatioAnalyzer:
-    """
-    تحلیل‌گر EAR با حفظ تاریخچه و تشخیص الگوهای پلک زدن و خواب‌آلودگی
-    """
     def __init__(self, 
                  history_size: int = 30, 
                  ear_threshold: float = 0.25,
                  fps:int=30,
-                #  drowsy_frames_threshold: int = 300,
                  drowsy_duration_sec:float=5.0,
 ):
-        """
-        Args:
-            history_size: تعداد فریم‌هایی که نگهداری می‌شوند
-            ear_threshold: آستانه تشخیص چشم بسته
-            drowsy_frames_threshold: تعداد فریم‌های متوالی چشم بسته برای تشخیص خواب‌آلودگی
-        """
         self.blink_timestamps=deque()
         self.blink_window_seconds = 60
         self.history_size = history_size
@@ -99,13 +79,6 @@ class EyeAspectRatioAnalyzer:
         # آمار
         self.last_blink_frame = 0
     def update(self, ear_value: float) -> dict:
-        """
-        به‌روزرسانی تحلیل‌گر با مقدار جدید EAR
-        Args:
-            ear_value: مقدار EAR اندازه‌گیری شده
-        Returns:
-            دیکشنری شامل وضعیت‌های مختلف
-        """
         current_time=time.time()
         # اضافه کردن به تاریخچه
         self.ear_history.append(ear_value)
@@ -143,12 +116,12 @@ class EyeAspectRatioAnalyzer:
         else:
             if self.closed_frames > 0:
                 if 2 <= self.closed_frames <=int(self.fps*0.8):
-                    print("✅ BLINK DETECTED")
+                    print(" BLINK DETECTED")
                     self.blink_count += 1
                     self.last_blink_frame = self.total_frames
                     self.blink_timestamps.append(current_time)
                 else:
-                    print("❌ NOT BLINK")
+                    print(" NOT BLINK")
             self.closed_frames = 0
             self.closed_start_time=None
         closed_duration=0.0
@@ -195,6 +168,8 @@ class EyeAspectRatioAnalyzer:
     def set_threshold(self, new_threshold: float):
         """تنظیم آستانه جدید (برای کالیبراسیون شخصی)"""
         self.ear_threshold = new_threshold
+        self.close_threshold = new_threshold - 0.01
+        self.open_threshold = new_threshold + 0.01
     def get_statistics(self) -> dict:
         """دریافت آمار کلی"""
         return {

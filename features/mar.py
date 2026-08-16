@@ -1,8 +1,4 @@
-# features/mar.py
-"""
-محاسبه Mouth Aspect Ratio (MAR) برای تشخیص خمیازه
-و تحلیل تاریخچه برای تشخیص الگوهای خستگی
-"""
+
 import time
 import numpy as np
 from typing import List, Optional, Dict

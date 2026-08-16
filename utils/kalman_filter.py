@@ -1,9 +1,5 @@
 
 # utils/kalman_filter.py
-"""
-فیلتر کالمن ساده برای صاف کردن EAR و MAR
-نسخه اولیه - قابل ارتقاء بعداً
-"""
 
 class AdaptiveKalmanFilter:
     """ 
@@ -11,10 +7,8 @@ class AdaptiveKalmanFilter:
 
     def __init__(self):
 
-        # حافظه جدا برای EAR
         self.last_ear = 0.3
 
-        # حافظه جدا برای MAR
         self.last_mar = 0.2
 
         self.smoothing_factor = 0.7

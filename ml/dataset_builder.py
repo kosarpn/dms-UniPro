@@ -2,13 +2,16 @@ import os
 import cv2
 import pandas as pd
 from pathlib import Path
-from detectors.hybrid_detector import HybridDetector
+from detectors.hybrid_detector import HybridDetector,DetectionMethod
 from features.extractor import FeatureExtractor
+
 class DatasetBuilder:
     def __init__(self):
         self.detector = HybridDetector()
         self.extractor = FeatureExtractor()
         self.samples = []
+        self.failed_detection=0
+        self.failed_landmarks=0
     def process_image(
             self,
             image_path,
@@ -19,11 +22,14 @@ class DatasetBuilder:
             return
         detection = self.detector.detect(
             image)
+        if detection.method_used != DetectionMethod.MEDIAPIPE:
+            return
         # فقط MediaPipe
-        if (
-            not detection.success
-            or detection.landmarks is None
-        ):
+        if not detection.success:
+            self.failed_detection += 1
+            return
+        if detection.landmarks is None:
+            self.failed_landmarks += 1
             return
         (
             feature_vector,
@@ -56,6 +62,14 @@ class DatasetBuilder:
             "label":
                 label
         }
+        print(
+            "METHOD:",
+            detection.method_used,
+            "SUCCESS:",
+            detection.success,
+            "LANDMARKS:",
+            detection.landmarks is not None
+        )
         self.samples.append(sample)
     def process_folder(
             self,
@@ -63,7 +77,7 @@ class DatasetBuilder:
             label
     ):
         for file in os.listdir(folder_path):
-            if not file.lower().endswith(".jpg"):
+            if not file.lower().endswith((".jpg", ".jpeg", ".png")):
                 continue
             image_path = Path(folder_path) / file
             self.process_image(
@@ -89,3 +103,6 @@ class DatasetBuilder:
             df.head())
         print(
             df["label"].value_counts())
+        print("FAILED DETECTION:", self.failed_detection)
+        print("FAILED LANDMARKS:", self.failed_landmarks)
+        print("SAVED SAMPLES:", len(self.samples))

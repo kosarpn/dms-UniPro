@@ -39,30 +39,17 @@ class RuleBasedClassifier(BaseClassifier):
         confidence = min(score / 100.0, 1.0)
         # تعیین level
         if features.closed_duration >= 3:
-
             level = DrowsinessLevel.DROWSY
-
-
         elif score >= 60:
 
             level = DrowsinessLevel.SEVERE
-
-
         elif score >= 40:
 
             level = DrowsinessLevel.MODERATE
-
-
         elif score >= 20:
-
             level = DrowsinessLevel.LIGHT
-
-
         else:
-
             level = DrowsinessLevel.ALERT
- 
-
         return Prediction(
 
             is_drowsy = score >= self.score_threshold,
@@ -73,12 +60,25 @@ class RuleBasedClassifier(BaseClassifier):
 
             classifier_name="RuleBased",
 
-            reason=", ".join(reasons)
-
-        )
+            reason=", ".join(reasons))
     def reset(self):
             """
             Reset classifier internal states
             """
             pass
+    def predict_batch(self,dataframe):
+        predictions=[]
+        for _,row in dataframe.iterrows():
+            score=0
+            if row["ear"]<0.23:
+                score+=1
+            if row["mar"]>0.25:
+                score+=1
+            if abs(row["pitch"])>20:
+                score+=1
+            if row["is_head_down"]==1:
+                score+=1
+            predictions.append(1 if score>=2 else 0)
+        return predictions
+
 

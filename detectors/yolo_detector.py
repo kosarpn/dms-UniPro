@@ -7,7 +7,6 @@ class YOLODetector:
         self.model_path = model_path
         self.model = None
         self.available = False
-        
         try:
             from ultralytics import YOLO
             self.model = YOLO(model_path)
@@ -18,12 +17,9 @@ class YOLODetector:
     def detect(self, frame: np.ndarray) -> DetectionResult:
         if not self.available:
             return DetectionResult(score=0.0)
-            
         results = self.model(frame, verbose=False)
-        
         if len(results) == 0 or len(results[0].boxes) == 0:
             return DetectionResult(score=0.0)
-            
         # بهترین تشخیص را بگیر
         box = results[0].boxes[0]
         x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -41,8 +37,7 @@ class YOLODetector:
             landmarks=landmarks,
             bbox=(x1, y1, x2-x1, y2-y1),
             score=conf,
-            method="yolo"
-        )
+            method="yolo" )
         
     def _map_yolo_to_full(self, keypoints, x1, y1, x2, y2):
         """

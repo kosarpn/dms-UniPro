@@ -1,7 +1,3 @@
-"""
-Data Transfer Objects (DTOs) for DMS System
-این فایل شامل تمام ساختارهای داده‌ای مشترک بین لایه‌ها است
-"""
 
 from enum import Enum
 from dataclasses import dataclass
@@ -9,22 +5,6 @@ from dataclasses import dataclass
 # ============================================================================
 # Enums
 # ============================================================================
-
-class GazeDirection(Enum):
-    CENTER = "center"
-    LEFT = "left"
-    RIGHT = "right"
-    UP = "up"
-    DOWN = "down"
-    DISTRACTED = "distracted"
-    UNKNOWN = "unknown"
-class GazeAvailability(Enum):
-    """وضعیت در دسترس بودن سرویس تشخیص نگاه"""
-    FULL = "full"                    # تشخیص کامل (هر دو چشم قابل مشاهده)
-    PARTIAL = "partial"              # تشخیص ناقص (فقط یک چشم)
-    UNAVAILABLE = "unavailable"      # تشخیص غیرممکن
-    CALIBRATING = "calibrating"      # در حال کالیبراسیون
-    LOW_CONFIDENCE = "low_confidence" # اعتماد پایین
 
 class HeadPoseStatus(Enum):
     """وضعیت سر"""
@@ -64,14 +44,7 @@ class HeadPoseData:
     is_head_right: bool = False
 
     confidence: float = 1.0
-@dataclass
-class GazeData:
-    direction: GazeDirection
-    gaze_x: float
-    gaze_y: float
-    confidence: float = 1.0
-    off_road_duration: float = 0.0
-    is_distracted: bool = False
+
 @dataclass
 class EyeData:
     ear:float

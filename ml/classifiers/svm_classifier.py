@@ -21,8 +21,6 @@ class SVMClassifier(BaseClassifier):
 
         self.model_path = Path(model_path)
         self.scaler_path = Path(scaler_path)
-
-
         if self.model_path.exists() and self.scaler_path.exists():
             self.load(
                 self.model_path,
@@ -42,11 +40,9 @@ class SVMClassifier(BaseClassifier):
             features.is_head_left,
             features.is_head_right,
         ], dtype=np.float32)
-
     # -----------------------------
     # Training
     # -----------------------------
-
     def fit(self, X, y):
 
         self.model = SVC(
@@ -82,14 +78,14 @@ class SVMClassifier(BaseClassifier):
         prediction = int(
             self.model.predict(x)[0]
         )
-        probability = self.model.predict_proba(x)[0]
-        confidence = float(
-            np.max(probability)
-        )
+        # probability = self.model.predict_proba(x)[0]
+        # confidence = float(
+        #     np.max(probability)
+        # )
+        score = self.model.decision_function(x)[0]
+        confidence = abs(score)
         return Prediction(
-
             is_drowsy=bool(prediction),
-
             confidence=confidence,
             level=(
                 DrowsinessLevel.DROWSY
@@ -98,14 +94,10 @@ class SVMClassifier(BaseClassifier):
                 DrowsinessLevel.ALERT
             ),
             reason=
-                "svm_classifier"
+               "svm_classifier"
             ,
-
             classifier_name=self.name
-
         )
-
-
     # -----------------------------
     # Persistence
     # -----------------------------
@@ -131,8 +123,6 @@ class SVMClassifier(BaseClassifier):
                 self.scaler,
                 scaler_path
             )
-
-
     def load(
         self,
         model_path,
@@ -146,8 +136,20 @@ class SVMClassifier(BaseClassifier):
         self.scaler = joblib.load(
             scaler_path
         )
-
-
     def reset(self):
 
         pass
+    def predict_batch(self,dataframe):
+        x=dataframe[
+            ["ear",
+             "mar",
+             "pitch",
+             "yaw",
+             "roll",
+             "is_head_down",
+             "is_head_left",
+             "is_head_right",]
+        ]
+        if self.scaler:
+            x=self.scaler.transform(x)
+        return self.model.predict(x)

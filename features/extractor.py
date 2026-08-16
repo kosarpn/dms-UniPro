@@ -1,28 +1,8 @@
-"""
-Feature Extractor
-
-MediaPipe FaceMesh landmarks
-            |
-            v
-    EAR Analyzer
-    MAR Analyzer
-    Head Pose Estimator
-            |
-            v
-      EyeData
-      MouthData
-      HeadPoseData
-            |
-            v
-      Feature Vector
-"""
-
 from features.ear import EyeAspectRatioAnalyzer
 from features.mar import MouthAspectRatioAnalyzer
 from features.head_pose import HeadPoseEstimator
 
 import numpy as np
-
 
 from core.data_types import (
     EyeData,
@@ -74,10 +54,7 @@ class FeatureExtractor:
         self.ear_analyzer = EyeAspectRatioAnalyzer()
         self.mar_analyzer = MouthAspectRatioAnalyzer()
         self.head_pose_estimator = HeadPoseEstimator()
-
-
     # =========================================================
-
     def extract(
         self,
         landmarks: np.ndarray,
@@ -214,9 +191,6 @@ class FeatureExtractor:
                 mar_result["is_smiling"],
 
         )
-
-
-
         # =====================================================
         # 3) Head Pose
         # =====================================================
@@ -274,22 +248,15 @@ class FeatureExtractor:
                         "head_left",
                         False
                     ),
-
-
                 is_head_right=
                     hp.get(
                         "head_right",
                         False
                     )
             )
-
-
-
         # =====================================================
         # 4) Feature Vector
         # =====================================================
-
-
         feature_vector = build_feature_vector(
 
             eye_data,
@@ -298,8 +265,6 @@ class FeatureExtractor:
 
             head_pose_data
         )
-
-
         return (
 
             feature_vector,

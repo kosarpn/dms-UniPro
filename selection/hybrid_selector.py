@@ -9,8 +9,6 @@
 import numpy as np
 from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass
-
-
 @dataclass
 class FaceCandidate:
     """اطلاعات یک چهره کاندید"""
@@ -20,8 +18,6 @@ class FaceCandidate:
     position_score: float   # 0-1 (در محدوده راننده = بالاتر)
     tracking_score: float   # 0-1 (سازگاری با تاریخچه)
     total_score: float = 0.0
-
-
 class HybridDriverSelector:
     """
     انتخاب راننده با ترکیب چندین معیار
@@ -31,7 +27,6 @@ class HybridDriverSelector:
     - position_weight: 0.3 (موقعیت)
     - tracking_weight: 0.2 (تاریخچه)
     """
-    
     def __init__(self,
                  steering_side: str = "left",
                  frame_width: int = 640,
@@ -39,20 +34,16 @@ class HybridDriverSelector:
                  distance_weight: float = 0.5,
                  position_weight: float = 0.3,
                  tracking_weight: float = 0.2):
-        
         self.steering_side = steering_side
         self.frame_width = frame_width
         self.frame_height = frame_height
-        
         self.distance_weight = distance_weight
         self.position_weight = position_weight
         self.tracking_weight = tracking_weight
-        
         # تاریخچه ردیابی
         self.last_driver_idx: Optional[int] = None
         self.last_driver_bbox: Optional[Tuple] = None
         self.tracking_history: List[Tuple] = []  # آخرین 10 موقعیت
-        
         # محدوده راننده (از کالیبراسیون)
         self.driver_x_range: Tuple[float, float] = (0, frame_width)
         self.driver_y_range: Tuple[float, float] = (0, frame_height)
@@ -128,7 +119,6 @@ class HybridDriverSelector:
         self._update_tracking(best.index, best.bbox)
         
         return best.index
-    
     def _calculate_distance_score(self,
                                    bbox: Tuple,
                                    distances: List[Optional[float]],

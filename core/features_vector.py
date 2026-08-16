@@ -1,7 +1,3 @@
-""" Feature Vector Builder
-تبدیل DTO ها به بردار عددی برای ML models
-"""
-
 from dataclasses import dataclass
 import numpy as np
 
@@ -10,12 +6,8 @@ from core.data_types import (
     MouthData,
     HeadPoseData
 )
-
-
 @dataclass
 class FeatureVector:
-    """Feature vector قابل استفاده برای ML"""
-
     # =========================================
     # Eye Features
     # =========================================
@@ -25,7 +17,6 @@ class FeatureVector:
     perclos: float
     closed_duration: float
     is_eye_closed: float
-
     # =========================================
     # Mouth Features
     # =========================================
@@ -33,7 +24,6 @@ class FeatureVector:
     average_mar: float
     yawn_duration: float
     yawn_count: int
-
     # =========================================
     # Head Pose Features
     # =========================================
@@ -44,15 +34,12 @@ class FeatureVector:
     head_down_frames: int
     is_head_left: float
     is_head_right: float
-   
-
     # =========================================
     # Convert to numpy
     # =========================================
     def to_numpy(self) -> np.ndarray:
 
         return np.array([
-
             # Eye
             self.ear,
             self.average_ear,
@@ -66,7 +53,6 @@ class FeatureVector:
             self.average_mar,
             self.yawn_duration,
             self.yawn_count,
-
             # Head Pose
             self.pitch,
             self.yaw,
@@ -81,14 +67,11 @@ def build_feature_vector(
         eye_data: EyeData,
         mouth_data: MouthData,
         head_pose_data: HeadPoseData
-
 ) -> FeatureVector:
     """
     ساخت feature vector از DTO ها
     """
-
     return FeatureVector(
-
         # =====================
         # Eye
         # =====================

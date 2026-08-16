@@ -49,12 +49,8 @@ class HeadPoseEstimator:
             rotation_matrix[0,0] ** 2 +
             rotation_matrix[1,0] ** 2
         )
-
         singular = sy < 1e-6
-
-
         if not singular:
-
             pitch = np.arctan2(
                 rotation_matrix[2,1],
                 rotation_matrix[2,2]

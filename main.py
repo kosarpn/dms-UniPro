@@ -1,20 +1,3 @@
-"""
-Driver Drowsiness Detection System (DMS)
-A real-time driver monitoring system using hybrid face detection,
-depth estimation, and personalized calibration.
-
-Author: Your Name
-Date: 2025
-Version: 2.0.0
-
-Features:
-- Hybrid face detection (MediaPipe + YOLO fallback)
-- Monocular depth estimation (MiDAS)
-- Driver selection with distance + position calibration
-- Real-time drowsiness detection (EAR + MAR + Head Pose)
-- Kalman filtering for noise reduction
-- Personalized calibration for each driver
-"""
 import cv2
 import time
 import signal
@@ -23,68 +6,41 @@ from pathlib import Path
 from typing import Optional
 import numpy as np
 #برای مقایسه cpu usage
-
-
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 # ============================================================================
 # Imports - Organized by layer
 # ============================================================================
-
 # Configuration & Utils
 from utils.config import Config
-from utils.logger import setup_logger, get_logger
+from utils.logger import setup_logger,get_logger
 from utils.kalman_filter import AdaptiveKalmanFilter
-
 # Calibration Layer
 from calibration.calibration_manager import CalibrationManager
 from calibration.ear_calibration import EARCalibration
 from calibration.distance_calibration import DistanceCalibration
 from calibration.position_calibration import PositionCalibration
-
 # Detection Layer
 from detectors.hybrid_detector import HybridDetector
-
 # Depth Estimation Layer
 from depth.midas_depth import MiDASDepthEstimator
 # Driver Selection Layer
 from selection.hybrid_selector import HybridDriverSelector
-# # Feature Extraction Layer
-# from features.ear import EyeAspectRatioAnalyzer
-# from features.mar import MouthAspectRatioAnalyzer
-# from features.head_pose import HeadPoseEstimator
+
 from features.extractor import FeatureExtractor
 from core.data_types import EyeData, MouthData, HeadPoseData
 from core.features_vector import build_feature_vector
-
 # Alert Layer
 from alerts.alert_manager import AlertManager
-
 #import کردن classifier ها
 from ml.classifiers.rule_based_classifier import RuleBasedClassifier
 from ml.classifiers.svm_classifier import SVMClassifier
+from ml.classifiers.rf_classifier import RFClassifier
 # ============================================================================
 # Main Application Class
 # ============================================================================
-
 class DriverMonitoringSystem:
-    """
-    Main DMS Application Class
-    
-    Responsibilities:
-    - Orchestrate all system components
-    - Handle camera input and video processing
-    - Manage calibration workflow
-    - Coordinate driver selection
-    - Process drowsiness detection
-    - Handle graceful shutdown
-    """
     def __init__(self, config_path: Optional[str] = None):
-        """
-        Initialize the Driver Monitoring System
-        Args:
-            config_path: Path to custom configuration file (optional)
-        """
         # ====================================================================
         # Layer 1: Configuration & Logging
         # ====================================================================
@@ -97,8 +53,7 @@ class DriverMonitoringSystem:
         self.logger.info("=" * 60)
         self.logger.info("Driver Drowsiness Detection System Initializing...")
         self.logger.info(f"Version: 2.0.0 | Mode: {self.config.MODE}")
-        self.logger.info("=" * 60)
-        
+        self.logger.info("=" * 60) 
         # ====================================================================
         # Layer 2: Detection Components
         # ====================================================================
@@ -108,21 +63,17 @@ class DriverMonitoringSystem:
             yolo_confidence=self.config.YOLO_CONFIDENCE,
             fallback_threshold=self.config.FALLBACK_THRESHOLD
         )
-        
         self.depth_estimator = MiDASDepthEstimator(
             model_type=self.config.DEPTH_MODEL_TYPE
         ) if self.config.ENABLE_DEPTH_ESTIMATION else None
-        
         # ====================================================================
         # Layer 3: Calibration Components
         # ====================================================================
         self.logger.info("Initializing calibration components...")
-        
         self.calibration_manager = CalibrationManager(
             calibration_duration_sec=self.config.CALIBRATION_DURATION,
             reference_distance_cm=self.config.REFERENCE_DISTANCE
         )
-        
         self.ear_calibration = EARCalibration()
         self.distance_calibration = DistanceCalibration(
             reference_distance_cm=self.config.REFERENCE_DISTANCE
@@ -185,14 +136,11 @@ class DriverMonitoringSystem:
         self._setup_signal_handlers()
         
         self.logger.info("✅ All components initialized successfully!")
-        # ====================================================================
-        # For comparing the  real-time metrics on  methods
-        # ====================================================================
+        self.current_fps=0
 
     # ========================================================================
     # Configuration Methods
     # ========================================================================
-    
     def _load_configuration(self, config_path: Optional[str]) -> Config:
         """Load configuration from file or use defaults"""
         if config_path and Path(config_path).exists():
@@ -201,7 +149,6 @@ class DriverMonitoringSystem:
         else:
             # Use default config
             return Config()
-    
     # ========================================================================
     # Signal Handling
     # ========================================================================
@@ -212,14 +159,11 @@ class DriverMonitoringSystem:
             self.logger.info(f"Received signal {signum}, shutting down...")
             self.shutdown()
             sys.exit(0)
-        
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
-    
     # ========================================================================
     # Camera Management
     # ========================================================================
-    
     def _initialize_camera(self) -> Optional[cv2.VideoCapture]:
         """Initialize and configure camera"""
         self.logger.info("Initializing camera...")
@@ -290,11 +234,7 @@ class DriverMonitoringSystem:
                     result.landmarks,
                     frame.shape
                 )
-
-
                 ear_value = eye_data.average_ear
-
-
                 self.calibration_manager.add_frame(
                     ear=ear_value,
                     face_bbox=result.face_bbox,
@@ -307,6 +247,9 @@ class DriverMonitoringSystem:
         
         # Finalize calibration
         profile = self.calibration_manager.finalize_calibration()
+        self.feature_extractor.ear_analyzer.set_threshold(
+        profile.ear_threshold
+    )
         if profile:
             self.current_driver_id = driver_id
             self.current_driver_profile = profile
@@ -316,7 +259,8 @@ class DriverMonitoringSystem:
                 profile=self.current_driver_profile
             ),
 
-            "svm": SVMClassifier()
+            "svm": SVMClassifier(),
+
         }
             
             # Update driver selector with calibrated range
@@ -327,7 +271,7 @@ class DriverMonitoringSystem:
                 )
             
             cv2.destroyWindow("Calibration")
-            self.logger.info(f"✅ Calibration complete for driver: {driver_id}")
+            self.logger.info(f" Calibration complete for driver: {driver_id}")
             return True
         else:
             self.logger.error("Calibration failed!")
@@ -405,7 +349,6 @@ class DriverMonitoringSystem:
         # ======================================================
 
         if detection_result.method_used==detection_result.method_used.MEDIAPIPE:
-
             (
                 feature_vector,
                 eye_data,
@@ -433,34 +376,12 @@ class DriverMonitoringSystem:
             # ====================================================================
             
             # prediction = self.classifiers.predict(feature_vector)
-            classifier_results={}
+          
+            result["classifier_results"]={}
             for name,clf in self.classifiers.items():
-                start=time.time()
-                prediction=clf.predict(feature_vector)
-                interface_time=(
-                    time.time()-start
-                )*1000
-                classifier_results[name]={
-                      "is_drowsy":
-                        prediction.is_drowsy,
-
-                    "confidence":
-                        prediction.confidence,
-
-                    "level":
-                        prediction.level.value,
-
-                    "time_ms":
-                        interface_time
-}
-                result["classifier_results"]={}
-                for name,clf in self.classifiers.items():
                     start=time.time()
-
                     prediction = clf.predict(feature_vector)
-
                     inference_time = (time.time()-start)*1000
-
                     result["classifier_results"][name] = {
                         "is_drowsy": prediction.is_drowsy,
                         "confidence": prediction.confidence,
@@ -570,20 +491,15 @@ class DriverMonitoringSystem:
                 (255,255,0),
                 2
             )
-
             if "classifier_results" in result:
-
                 y = 220
-
                 for name,data in result["classifier_results"].items():
-
                     text = (
                         f"{name}: "
                         f"{data['is_drowsy']} "
                         f"{data['confidence']:.2f} "
                         f"{data['time_ms']:.2f}ms"
                     )
-
                     cv2.putText(
                         display,
                         text,
@@ -593,7 +509,6 @@ class DriverMonitoringSystem:
                         (255,255,255),
                         1
                     )
-
                     y += 20
         # Processing time
         cv2.putText(display, f"Time: {result['processing_time_ms']:.1f}ms", (10, 105),
@@ -609,14 +524,19 @@ class DriverMonitoringSystem:
             cv2.rectangle(display, (w//2-150, 0), (w//2+150, 50), (0, 255, 255), -1)
             cv2.putText(display, "😮 YAWN DETECTED", (w//2-130, 35),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
-        
         # ====================================================================
         # Info Panel (Top-right)
         # ====================================================================
         fps = self.fps_counter if time.time() - self.fps_time < 1.0 else 0
-        cv2.putText(display, f"FPS: {fps}", (w-100, 25),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
-        
+        cv2.putText(
+        display,
+        f"FPS: {self.current_fps:.1f}",
+        (w-100, 25),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.5,
+        (0,255,255),
+        1
+    )     
         method = "MediaPipe" if result.get('method') == 'mediapipe' else "YOLO"
         cv2.putText(display, f"Method: {method}", (w-100, 45),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
@@ -627,8 +547,6 @@ class DriverMonitoringSystem:
         bar_width = int(w * confidence)
         cv2.rectangle(display, (0, h-10), (bar_width, h), (0, 255, 0), -1)
         cv2.rectangle(display, (0, h-10), (w, h), (255, 255, 255), 1)
-
-        
         return display
     
     # ========================================================================
@@ -637,15 +555,30 @@ class DriverMonitoringSystem:
     
     def _update_fps(self):
         """Update FPS counter"""
+
         self.fps_counter += 1
-        if time.time() - self.fps_time >= 1.0:
-            fps = self.fps_counter
+
+        elapsed = time.time() - self.fps_time
+
+        if elapsed >= 1.0:
+
+            self.current_fps = self.fps_counter / elapsed
+
             self.fps_counter = 0
             self.fps_time = time.time()
-            
+
             if self.frame_count % 100 == 0:
-                avg_time = np.mean(self.processing_times[-100:]) if self.processing_times else 0
-                self.logger.info(f"Stats - Frame: {self.frame_count}, FPS: {fps}, Avg Time: {avg_time:.1f}ms")
+
+                avg_time = (
+                    np.mean(self.processing_times[-100:])
+                    if self.processing_times else 0
+                )
+
+                self.logger.info(
+                    f"Stats - Frame: {self.frame_count}, "
+                    f"FPS: {self.current_fps:.1f}, "
+                    f"Avg Time: {avg_time:.1f}ms"
+                )
     # ========================================================================
     # Main Loop
     # ========================================================================
@@ -662,7 +595,7 @@ class DriverMonitoringSystem:
             if not self._run_calibration(cap):
                 self.logger.warning("Calibration skipped or failed. Using default settings.")
         self.is_running = True
-        self.logger.info("🚀 System running. Press 'q' to quit, 'c' to recalibrate")
+        self.logger.info(" System running. Press 'q' to quit, 'c' to recalibrate")
         # Main processing loop
         while self.is_running:
             # Read frame
@@ -702,18 +635,14 @@ class DriverMonitoringSystem:
     # Shutdown
     # ========================================================================
     def shutdown(self):
-        """Graceful shutdown of all components"""
         self.logger.info("Shutting down system...")
         self.is_running = False
-        
         # Close detectors
         if hasattr(self.face_detector, 'close'):
             self.face_detector.close()
-        
         # Save calibration data
         if self.current_driver_profile:
-            self.logger.info(f"Saving profile for driver: {self.current_driver_id}")
-        
+            self.logger.info(f"Saving profile for driver: {self.current_driver_id}")  
         # Log final statistics
         self.logger.info("=" * 60)
         self.logger.info(f"System Statistics:")
@@ -722,12 +651,9 @@ class DriverMonitoringSystem:
         self.logger.info(f"  - Calibrated: {self.is_calibrated}")
         self.logger.info("=" * 60)
         self.logger.info("✅ System shutdown complete")
-
-
 # ============================================================================
 # Entry Point
 # ============================================================================
-
 def main():
     """Application entry point"""
     # Parse command line arguments
@@ -740,10 +666,8 @@ def main():
     # Run application
     try:
         app = DriverMonitoringSystem(config_path=args.config)
-        
         if args.debug:
             app.config.LOG_LEVEL = "DEBUG"
-        
         app.run()
     except KeyboardInterrupt:
         print("\nInterrupted by user")
@@ -752,7 +676,5 @@ def main():
         import traceback
         traceback.print_exc()
         sys.exit(1)
-
-
 if __name__ == "__main__":
     main()
